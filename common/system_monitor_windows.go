@@ -4,6 +4,7 @@ package common
 
 import (
 	"os"
+	"path/filepath"
 	"syscall"
 	"unsafe"
 )
@@ -12,7 +13,15 @@ import (
 func GetDiskSpaceInfo() DiskSpaceInfo {
 	cachePath := GetDiskCachePath()
 	if cachePath == "" {
-		cachePath = os.TempDir()
+		// Use the executable's directory instead of os.TempDir(),
+		// so we check the disk where new-api is actually deployed,
+		// not the system temp dir (often C:\ which may be nearly full).
+		exePath, err := os.Executable()
+		if err == nil {
+			cachePath = filepath.Dir(exePath)
+		} else {
+			cachePath = "."
+		}
 	}
 
 	info := DiskSpaceInfo{}
