@@ -2,18 +2,16 @@ package suno
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
+	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 
@@ -21,11 +19,16 @@ import (
 )
 
 type TaskAdaptor struct {
+	taskcommon.BaseBilling
 	ChannelType int
 }
 
+// ParseTaskResult is not used for Suno tasks.
+// Suno polling uses a dedicated batch-fetch path (service.UpdateSunoTasks) that
+// receives dto.TaskResponse[[]dto.SunoDataResponse] from the upstream /fetch API.
+// This differs from the per-task polling used by video adaptors.
 func (a *TaskAdaptor) ParseTaskResult([]byte) (*relaycommon.TaskInfo, error) {
-	return nil, fmt.Errorf("not implement") // todo implement this method if needed
+	return nil, fmt.Errorf("suno uses batch polling via UpdateSunoTasks, ParseTaskResult is not applicable")
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
@@ -47,13 +50,13 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 		return
 	}
 
-	if sunoRequest.ContinueClipId != "" {
-		if sunoRequest.TaskID == "" {
-			taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("task id is empty"), "invalid_request", http.StatusBadRequest)
-			return
-		}
-		info.OriginTaskID = sunoRequest.TaskID
-	}
+	//if sunoRequest.ContinueClipId != "" {
+	//	if sunoRequest.TaskID == "" {
+	//		taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("task id is empty"), "invalid_request", http.StatusBadRequest)
+	//		return
+	//	}
+	//	info.OriginTaskID = sunoRequest.TaskID
+	//}
 
 	info.Action = action
 	c.Set("task_request", sunoRequest)
@@ -62,7 +65,8 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := info.ChannelBaseUrl
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, "/suno/submit/"+info.Action)
+	// Use lowercase action in URL path to maintain compatibility with upstream APIs
+	fullRequestURL := fmt.Sprintf("%s%s", baseURL, "/suno/submit/"+strings.ToLower(info.Action))
 	return fullRequestURL, nil
 }
 
@@ -76,12 +80,9 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	sunoRequest, ok := c.Get("task_request")
 	if !ok {
-		err := common.UnmarshalBodyReusable(c, &sunoRequest)
-		if err != nil {
-			return nil, err
-		}
+		return nil, fmt.Errorf("task_request not found in context")
 	}
-	data, err := json.Marshal(sunoRequest)
+	data, err := common.Marshal(sunoRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 	var sunoResponse dto.TaskResponse[string]
-	err = json.Unmarshal(responseBody, &sunoResponse)
+	err = common.Unmarshal(responseBody, &sunoResponse)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 		return
@@ -109,17 +110,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	for k, v := range resp.Header {
-		c.Writer.Header().Set(k, v[0])
+	// 使用公开 task_xxxx ID 替换上游 ID 返回给客户端
+	publicResponse := dto.TaskResponse[string]{
+		Code:    sunoResponse.Code,
+		Message: sunoResponse.Message,
+		Data:    info.PublicTaskID,
 	}
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.WriteHeader(resp.StatusCode)
-
-	_, err = io.Copy(c.Writer, bytes.NewBuffer(responseBody))
-	if err != nil {
-		taskErr = service.TaskErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError)
-		return
-	}
+	c.JSON(http.StatusOK, publicResponse)
 
 	return sunoResponse.Data, nil, nil
 }
@@ -134,7 +131,7 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	requestUrl := fmt.Sprintf("%s/suno/fetch", baseUrl)
-	byteBody, err := json.Marshal(body)
+	byteBody, err := common.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -144,13 +141,6 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		common.SysLog(fmt.Sprintf("Get Task error: %v", err))
 		return nil, err
 	}
-	defer req.Body.Close()
-	// 设置超时时间
-	timeout := time.Second * 15
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	// 使用带有超时的 context 创建新的请求
-	req = req.WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
 	client, err := service.GetHttpClientWithProxy(proxy)
@@ -164,7 +154,7 @@ func actionValidate(c *gin.Context, sunoRequest *dto.SunoSubmitReq, action strin
 	switch action {
 	case constant.SunoActionMusic:
 		if sunoRequest.Mv == "" {
-			sunoRequest.Mv = "chirp-v3-0"
+			sunoRequest.Mv = "chirp-v4"
 		}
 	case constant.SunoActionLyrics:
 		if sunoRequest.Prompt == "" {
