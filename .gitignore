@@ -29,3 +29,9 @@ data/
 .gomodcache/
 .gocache-temp
 .gopath
+
+
+# mty
+
+额外内容/*
+额外调查/*
