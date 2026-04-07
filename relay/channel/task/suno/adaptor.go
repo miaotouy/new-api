@@ -65,8 +65,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	baseURL := info.ChannelBaseUrl
-	// Use lowercase action in URL path to maintain compatibility with upstream APIs
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, "/suno/submit/"+strings.ToLower(info.Action))
+	fullRequestURL := fmt.Sprintf("%s%s", baseURL, "/suno/submit/"+info.Action)
 	return fullRequestURL, nil
 }
 
@@ -154,7 +153,7 @@ func actionValidate(c *gin.Context, sunoRequest *dto.SunoSubmitReq, action strin
 	switch action {
 	case constant.SunoActionMusic:
 		if sunoRequest.Mv == "" {
-			sunoRequest.Mv = "chirp-v4"
+			sunoRequest.Mv = "chirp-v3-0"
 		}
 	case constant.SunoActionLyrics:
 		if sunoRequest.Prompt == "" {
