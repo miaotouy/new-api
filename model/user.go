@@ -47,6 +47,7 @@ type User struct {
 	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DeletedAt        gorm.DeletedAt `gorm:"index"`
 	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	MisskeyId        string         `json:"misskey_id" gorm:"column:misskey_id;index"`
 	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
 	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	StripeCustomer   string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
@@ -552,6 +553,7 @@ func (user *User) ClearBinding(bindingType string) error {
 		"wechat":   "wechat_id",
 		"telegram": "telegram_id",
 		"linuxdo":  "linux_do_id",
+		"misskey":  "misskey_id",
 	}
 
 	column, ok := bindingColumnMap[bindingType]
@@ -1013,6 +1015,18 @@ func GetUsernameById(id int, fromDB bool) (username string, err error) {
 	}
 
 	return username, nil
+}
+
+func IsMisskeyIdAlreadyTaken(misskeyId string) bool {
+	return DB.Unscoped().Where("misskey_id = ?", misskeyId).Find(&User{}).RowsAffected == 1
+}
+
+func (user *User) FillUserByMisskeyId() error {
+	if user.MisskeyId == "" {
+		return errors.New("misskey id is empty")
+	}
+	err := DB.Where("misskey_id = ?", user.MisskeyId).First(user).Error
+	return err
 }
 
 func IsLinuxDOIdAlreadyTaken(linuxDOId string) bool {

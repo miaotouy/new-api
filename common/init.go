@@ -106,6 +106,10 @@ func InitEnv() {
 	RelayIdleConnTimeout = GetEnvOrDefault("RELAY_IDLE_CONN_TIMEOUT", 90)
 	RelayDisableKeepAlive = GetEnvOrDefaultBool("RELAY_DISABLE_KEEP_ALIVE", false)
 
+	// Initialize Misskey OAuth
+	MisskeyOAuthEnabled = GetEnvOrDefaultBool("MISSKEY_OAUTH_ENABLED", false)
+	MisskeyInstance = GetEnvOrDefaultString("MISSKEY_INSTANCE", "")
+
 	// Initialize string variables with GetEnvOrDefaultString
 	GeminiSafetySetting = GetEnvOrDefaultString("GEMINI_SAFETY_SETTING", "BLOCK_NONE")
 	CohereSafetySetting = GetEnvOrDefaultString("COHERE_SAFETY_SETTING", "NONE")

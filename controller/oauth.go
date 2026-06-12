@@ -3,7 +3,9 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -311,6 +313,7 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 				"discord_id":  user.DiscordId,
 				"oidc_id":     user.OidcId,
 				"linux_do_id": user.LinuxDOId,
+				"misskey_id":  user.MisskeyId,
 				"wechat_id":   user.WeChatId,
 				"telegram_id": user.TelegramId,
 			}).Error; err != nil {
@@ -341,6 +344,70 @@ type OAuthRegistrationDisabledError struct{}
 
 func (e *OAuthRegistrationDisabledError) Error() string {
 	return "registration is disabled"
+}
+
+// HandleMisskeyAuth redirects to the Misskey MiAuth authorization page
+func HandleMisskeyAuth(c *gin.Context) {
+	provider := oauth.GetProvider("misskey")
+	if provider == nil || !provider.IsEnabled() {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgOAuthNotEnabled),
+		})
+		return
+	}
+
+	session := sessions.Default(c)
+
+	// Generate CSRF state
+	state := common.GetRandomString(12)
+	session.Set("oauth_state", state)
+
+	affCode := c.Query("aff")
+	if affCode != "" {
+		session.Set("aff", affCode)
+	}
+
+	if err := session.Save(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// Generate MiAuth session ID
+	miAuthSessionId := common.GetRandomString(32)
+
+	// Build the callback URL
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	callbackURL := fmt.Sprintf("%s://%s/api/oauth/misskey?state=%s&session=%s", scheme, c.Request.Host, state, miAuthSessionId)
+
+	// Get the Misskey instance
+	instance := strings.TrimRight(common.MisskeyInstance, "/")
+
+	// Build MiAuth URL
+	authURL := fmt.Sprintf("%s/miauth/%s?name=%s&callback=%s&permission=read:account",
+		instance,
+		miAuthSessionId,
+		url.QueryEscape("NewAPI登录"),
+		url.QueryEscape(callbackURL),
+	)
+
+	c.Redirect(http.StatusFound, authURL)
+}
+
+// HandleMisskeyOAuth handles the Misskey MiAuth callback
+// Misskey MiAuth uses "session" instead of "code" in the callback
+func HandleMisskeyOAuth(c *gin.Context) {
+	// Convert session to code for the standard flow
+	session := c.Query("session")
+	if session != "" {
+		q := c.Request.URL.Query()
+		q.Set("code", session)
+		c.Request.URL.RawQuery = q.Encode()
+	}
+	HandleOAuth(c)
 }
 
 // handleOAuthError handles OAuth errors and returns translated message
