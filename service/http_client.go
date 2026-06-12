@@ -34,6 +34,8 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 }
 
 func InitHttpClient() {
+	common.SysLog(fmt.Sprintf("Relay HTTP client initialized with MaxIdleConns: %d, MaxIdleConnsPerHost: %d, IdleConnTimeout: %ds, DisableKeepAlives: %t",
+		common.RelayMaxIdleConns, common.RelayMaxIdleConnsPerHost, common.RelayIdleConnTimeout, common.RelayDisableKeepAlive))
 	transport := &http.Transport{
 		MaxIdleConns:        common.RelayMaxIdleConns,
 		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
