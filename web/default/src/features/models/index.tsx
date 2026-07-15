@@ -16,14 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { SectionPageLayout } from '@/components/layout'
+
 import { listDeployments } from './api'
 import { DeploymentAccessGuard } from './components/deployment-access-guard'
 import { DeploymentsTable } from './components/deployments-table'
@@ -54,7 +56,6 @@ const SECTION_META: Record<ModelsSectionId, { titleKey: string }> = {
 function ModelsContent() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { tabCategory, setTabCategory } = useModels()
   const params = route.useParams()
   const activeSection = (params.section ??
@@ -69,41 +70,6 @@ function ModelsContent() {
       setTabCategory(activeSection)
     }
   }, [activeSection, setTabCategory, tabCategory])
-
-  const {
-    loading: deploymentLoading,
-    loadingPhase,
-    isIoNetEnabled,
-    connectionLoading,
-    connectionOk,
-    connectionError,
-    testConnection,
-    refresh: refreshDeploymentSettings,
-  } = useModelDeploymentSettings()
-
-  // Ensure settings are fresh when switching to deployments section
-  useEffect(() => {
-    if (activeSection === 'deployments') {
-      refreshDeploymentSettings()
-    }
-  }, [activeSection, refreshDeploymentSettings])
-
-  // Prefetch deployments list while connection check is in progress
-  // This allows the data to be ready as soon as the guard passes
-  useEffect(() => {
-    if (
-      activeSection === 'deployments' &&
-      isIoNetEnabled &&
-      loadingPhase === 'connection'
-    ) {
-      const defaultParams = { p: 1, page_size: 10 }
-      queryClient.prefetchQuery({
-        queryKey: deploymentsQueryKeys.list(defaultParams),
-        queryFn: () => listDeployments(defaultParams),
-        staleTime: 30 * 1000, // 30 seconds
-      })
-    }
-  }, [activeSection, isIoNetEnabled, loadingPhase, queryClient])
 
   const handleSectionChange = useCallback(
     (section: string) => {
@@ -146,17 +112,7 @@ function ModelsContent() {
               {activeSection === 'metadata' ? (
                 <ModelsTable />
               ) : (
-                <DeploymentAccessGuard
-                  loading={deploymentLoading}
-                  loadingPhase={loadingPhase}
-                  isEnabled={isIoNetEnabled}
-                  connectionLoading={connectionLoading}
-                  connectionOk={connectionOk}
-                  connectionError={connectionError}
-                  onRetry={testConnection}
-                >
-                  <DeploymentsTable />
-                </DeploymentAccessGuard>
+                <DeploymentsSection />
               )}
             </div>
           </div>
@@ -169,6 +125,45 @@ function ModelsContent() {
         onOpenChange={setCreateDeploymentOpen}
       />
     </>
+  )
+}
+
+function DeploymentsSection() {
+  const queryClient = useQueryClient()
+  const {
+    loading: deploymentLoading,
+    loadingPhase,
+    isIoNetEnabled,
+    connectionLoading,
+    connectionOk,
+    connectionError,
+    testConnection,
+  } = useModelDeploymentSettings()
+
+  // Prefetch deployments list while connection check is in progress.
+  useEffect(() => {
+    if (isIoNetEnabled && loadingPhase === 'connection') {
+      const defaultParams = { p: 1, page_size: 10 }
+      queryClient.prefetchQuery({
+        queryKey: deploymentsQueryKeys.list(defaultParams),
+        queryFn: () => listDeployments(defaultParams),
+        staleTime: 30 * 1000,
+      })
+    }
+  }, [isIoNetEnabled, loadingPhase, queryClient])
+
+  return (
+    <DeploymentAccessGuard
+      loading={deploymentLoading}
+      loadingPhase={loadingPhase}
+      isEnabled={isIoNetEnabled}
+      connectionLoading={connectionLoading}
+      connectionOk={connectionOk}
+      connectionError={connectionError}
+      onRetry={testConnection}
+    >
+      <DeploymentsTable />
+    </DeploymentAccessGuard>
   )
 }
 

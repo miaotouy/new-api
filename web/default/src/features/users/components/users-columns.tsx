@@ -16,31 +16,31 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { useTranslation } from 'react-i18next'
-import { formatQuota, formatTimestamp } from '@/lib/format'
-import { cn } from '@/lib/utils'
+
+import { BadgeCell } from '@/components/data-table'
+import { GroupBadge } from '@/components/group-badge'
+import { LongText } from '@/components/long-text'
+import { StatusBadge } from '@/components/status-badge'
+import { TableId } from '@/components/table-id'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Progress } from '@/components/ui/progress'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { DataTableColumnHeader } from '@/components/data-table'
-import { GroupBadge } from '@/components/group-badge'
-import { LongText } from '@/components/long-text'
-import { StatusBadge } from '@/components/status-badge'
-import { TableId } from '@/components/table-id'
-import { USER_STATUSES, USER_ROLES, isUserDeleted } from '../constants'
-import { type User } from '../types'
-import { DataTableRowActions } from './data-table-row-actions'
+import { formatQuota, formatTimestamp } from '@/lib/format'
 
-function getQuotaProgressColor(percentage: number): string {
-  if (percentage <= 10) return '[&_[data-slot=progress-indicator]]:bg-rose-500'
-  if (percentage <= 30) return '[&_[data-slot=progress-indicator]]:bg-amber-500'
-  return '[&_[data-slot=progress-indicator]]:bg-emerald-500'
-}
+import {
+  USER_STATUS,
+  USER_STATUSES,
+  USER_ROLES,
+  isUserDeleted,
+} from '../constants'
+import type { User } from '../types'
+import { DataTableRowActions } from './data-table-row-actions'
+import { UserQuotaCell } from './user-quota-cell'
 
 export function useUsersColumns(): ColumnDef<User>[] {
   const { t } = useTranslation()
@@ -67,26 +67,24 @@ export function useUsersColumns(): ColumnDef<User>[] {
       enableSorting: false,
       enableHiding: false,
       size: 40,
-      meta: { label: t('Select') },
     },
     {
       accessorKey: 'id',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title='ID' />
-      ),
+      header: t('ID'),
       cell: ({ row }) => {
         return (
-          <TableId value={row.getValue('id') as number} className='w-[60px]' />
+          <TableId
+            value={row.getValue('id') as number}
+            className='w-[60px] text-sm'
+          />
         )
       },
       size: 80,
-      meta: { label: t('ID'), mobileHidden: true },
+      meta: { mobileOrder: 10 },
     },
     {
       accessorKey: 'username',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Username')} />
-      ),
+      header: t('Username'),
       cell: ({ row }) => {
         const username = row.getValue('username') as string
         const displayName = row.original.display_name
@@ -121,19 +119,17 @@ export function useUsersColumns(): ColumnDef<User>[] {
       },
       enableHiding: false,
       size: 220,
-      meta: { label: t('Username'), mobileTitle: true },
+      meta: { mobileTitle: true },
     },
     {
       accessorKey: 'status',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Status')} />
-      ),
+      header: t('Status'),
       cell: ({ row }) => {
         const user = row.original
         const requestCount = user.request_count
 
         const statusConfig = isUserDeleted(user)
-          ? USER_STATUSES.DELETED
+          ? USER_STATUSES[USER_STATUS.DELETED]
           : USER_STATUSES[user.status as keyof typeof USER_STATUSES]
 
         if (!statusConfig) {
@@ -142,7 +138,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
 
         return (
           <Tooltip>
-            <TooltipTrigger render={<div className='cursor-help' />}>
+            <TooltipTrigger render={<div className='-ml-1.5 cursor-help' />}>
               <StatusBadge
                 label={t(statusConfig.labelKey)}
                 variant={statusConfig.variant}
@@ -162,79 +158,30 @@ export function useUsersColumns(): ColumnDef<User>[] {
       },
       enableSorting: false,
       size: 120,
-      meta: { label: t('Status'), mobileBadge: true },
+      meta: { mobileBadge: true },
     },
     {
       id: 'quota',
       accessorKey: 'quota',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Quota')} />
-      ),
+      header: t('Quota'),
       cell: ({ row }) => {
         const user = row.original
-        const used = user.used_quota
-        const remaining = user.quota
-        const total = used + remaining
-        const percentage = total > 0 ? (remaining / total) * 100 : 0
-
-        if (total === 0) {
-          return (
-            <StatusBadge
-              label={t('No Quota')}
-              variant='neutral'
-              copyable={false}
-            />
-          )
-        }
-
-        return (
-          <Tooltip>
-            <TooltipTrigger
-              render={<div className='w-[150px] cursor-help space-y-1' />}
-            >
-              <div className='flex justify-between text-xs'>
-                <span className='font-medium tabular-nums'>
-                  {formatQuota(remaining)}
-                </span>
-                <span className='text-muted-foreground tabular-nums'>
-                  {formatQuota(total)}
-                </span>
-              </div>
-              <Progress
-                value={percentage}
-                className={cn('h-1.5', getQuotaProgressColor(percentage))}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className='space-y-1 text-xs'>
-                <div>
-                  {t('Used:')} {formatQuota(used)}
-                </div>
-                <div>
-                  {t('Remaining:')} {formatQuota(remaining)}
-                </div>
-                <div>
-                  {t('Total:')} {formatQuota(total)}
-                </div>
-                <div>
-                  {t('Percentage:')} {percentage.toFixed(1)}%
-                </div>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        )
+        return <UserQuotaCell used={user.used_quota} remaining={user.quota} />
       },
-      size: 170,
-      meta: { label: t('Quota') },
+      size: 300,
+      minSize: 260,
+      meta: { mobileOrder: 40 },
     },
     {
       accessorKey: 'group',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Group')} />
-      ),
+      header: t('Group'),
       cell: ({ row }) => {
         const group = row.getValue('group') as string
-        return <GroupBadge group={group} />
+        return (
+          <BadgeCell>
+            <GroupBadge group={group} />
+          </BadgeCell>
+        )
       },
       filterFn: (row, id, value) => {
         const group = String(row.getValue(id) || t('User Group')).toLowerCase()
@@ -242,13 +189,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
         return group.includes(searchValue)
       },
       size: 140,
-      meta: { label: t('Group') },
+      meta: { mobileOrder: 30 },
     },
     {
       accessorKey: 'role',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Role')} />
-      ),
+      header: t('Role'),
       cell: ({ row }) => {
         const roleValue = row.getValue('role') as number
         const roleConfig = USER_ROLES[roleValue as keyof typeof USER_ROLES]
@@ -271,13 +216,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
       },
       enableSorting: false,
       size: 120,
-      meta: { label: t('Role') },
+      meta: { mobileOrder: 20 },
     },
     {
       id: 'invite_info',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Invite Info')} />
-      ),
+      header: t('Invite Info'),
       cell: ({ row }) => {
         const user = row.original
         const affCount = user.aff_count || 0
@@ -285,7 +228,7 @@ export function useUsersColumns(): ColumnDef<User>[] {
         const inviterId = user.inviter_id || 0
 
         return (
-          <div className='flex min-w-[220px] flex-wrap items-center gap-1'>
+          <div className='flex max-w-full min-w-0 flex-wrap items-center gap-1 overflow-hidden'>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -347,13 +290,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
       },
       size: 240,
       enableSorting: false,
-      meta: { label: t('Invite Info'), mobileHidden: true },
+      meta: { mobileHidden: true },
     },
     {
       accessorKey: 'created_at',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Created At')} />
-      ),
+      header: t('Created At'),
       cell: ({ row }) => {
         const ts = row.getValue('created_at') as number | undefined
         return (
@@ -363,13 +304,11 @@ export function useUsersColumns(): ColumnDef<User>[] {
         )
       },
       size: 180,
-      meta: { label: t('Created At'), mobileHidden: true },
+      meta: { mobileHidden: true },
     },
     {
       accessorKey: 'last_login_at',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Last Login')} />
-      ),
+      header: t('Last Login'),
       cell: ({ row }) => {
         const ts = row.getValue('last_login_at') as number | undefined
         return (
@@ -379,12 +318,13 @@ export function useUsersColumns(): ColumnDef<User>[] {
         )
       },
       size: 180,
-      meta: { label: t('Last Login'), mobileHidden: true },
+      meta: { mobileHidden: true },
     },
     {
       id: 'actions',
+      header: () => t('Actions'),
       cell: ({ row }) => <DataTableRowActions row={row} />,
-      meta: { label: t('Actions') },
+      meta: { pinned: 'right' as const },
     },
   ]
 }
