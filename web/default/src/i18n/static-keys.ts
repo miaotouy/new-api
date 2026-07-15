@@ -343,6 +343,15 @@ export const STATIC_I18N_KEYS = [
   'Param Override',
   'Override request parameters',
 
+  // Channel header presets
+  'AIO Hub Default',
+  'Browser Client',
+  'Codex CLI',
+  'Timeout Headers',
+  'Source Identification',
+  'Claude Code',
+  'OpenRouter Attribution',
+
   // Profile / 2FA
   'Backed up',
   'Not backed up',

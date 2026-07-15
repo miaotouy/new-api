@@ -166,6 +166,7 @@ import {
   validateModelMappingJson,
   hasAdvancedSettingsErrors,
 } from '../../lib'
+import { CUSTOM_HEADER_PRESETS } from '../../lib/custom-header-presets'
 import {
   collectInvalidStatusCodeEntries,
   collectNewDisallowedStatusCodeRedirects,
@@ -3926,7 +3927,53 @@ export function ChannelMutateDrawer({
                                           {t('Override request headers')}
                                         </FormDescription>
                                       </div>
-                                      <div className='flex flex-wrap gap-2'>
+                                      <div className='flex flex-wrap items-center gap-2'>
+                                        <Select
+                                          onValueChange={(value) => {
+                                            const preset =
+                                              CUSTOM_HEADER_PRESETS.find(
+                                                (item) => item.id === value
+                                              )
+                                            if (!preset) return
+
+                                            field.onChange(
+                                              JSON.stringify(
+                                                preset.headers,
+                                                null,
+                                                2
+                                              )
+                                            )
+                                            toast.success(
+                                              t('Applied preset: {{name}}', {
+                                                name: t(preset.labelKey),
+                                              })
+                                            )
+                                          }}
+                                        >
+                                          <SelectTrigger className='h-8 w-[160px] text-xs'>
+                                            <SelectValue
+                                              placeholder={t('Apply Preset')}
+                                            />
+                                          </SelectTrigger>
+                                          <SelectContent
+                                            alignItemWithTrigger={false}
+                                          >
+                                            <SelectGroup>
+                                              {CUSTOM_HEADER_PRESETS.map(
+                                                (preset) => (
+                                                  <SelectItem
+                                                    key={preset.id}
+                                                    value={preset.id}
+                                                    className='text-xs'
+                                                  >
+                                                    {t(preset.labelKey)}
+                                                  </SelectItem>
+                                                )
+                                              )}
+                                            </SelectGroup>
+                                          </SelectContent>
+                                        </Select>
+
                                         <Button
                                           type='button'
                                           variant='outline'
