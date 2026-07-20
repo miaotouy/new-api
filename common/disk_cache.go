@@ -20,14 +20,18 @@ const (
 // 统一的缓存目录名
 const diskCacheDir = "new-api-body-cache"
 
+func getDiskCacheBasePath() string {
+	cachePath := GetDiskCachePath()
+	if cachePath == "" {
+		return os.TempDir()
+	}
+	return cachePath
+}
+
 // GetDiskCacheDir 获取统一的磁盘缓存目录
 // 注意：每次调用都会重新计算，以响应配置变化
 func GetDiskCacheDir() string {
-	cachePath := GetDiskCachePath()
-	if cachePath == "" {
-		cachePath = os.TempDir()
-	}
-	return filepath.Join(cachePath, diskCacheDir)
+	return filepath.Join(getDiskCacheBasePath(), diskCacheDir)
 }
 
 // EnsureDiskCacheDir 确保缓存目录存在

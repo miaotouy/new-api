@@ -2,18 +2,11 @@
 
 package common
 
-import (
-	"os"
-
-	"golang.org/x/sys/unix"
-)
+import "golang.org/x/sys/unix"
 
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Unix/Linux/macOS)
 func GetDiskSpaceInfo() DiskSpaceInfo {
-	cachePath := GetDiskCachePath()
-	if cachePath == "" {
-		cachePath = os.TempDir()
-	}
+	cachePath := getDiskCacheBasePath()
 
 	info := DiskSpaceInfo{}
 

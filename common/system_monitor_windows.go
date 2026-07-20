@@ -3,26 +3,13 @@
 package common
 
 import (
-	"os"
-	"path/filepath"
 	"syscall"
 	"unsafe"
 )
 
 // GetDiskSpaceInfo 获取缓存目录所在磁盘的空间信息 (Windows)
 func GetDiskSpaceInfo() DiskSpaceInfo {
-	cachePath := GetDiskCachePath()
-	if cachePath == "" {
-		// Use the executable's directory instead of os.TempDir(),
-		// so we check the disk where new-api is actually deployed,
-		// not the system temp dir (often C:\ which may be nearly full).
-		exePath, err := os.Executable()
-		if err == nil {
-			cachePath = filepath.Dir(exePath)
-		} else {
-			cachePath = "."
-		}
-	}
+	cachePath := getDiskCacheBasePath()
 
 	info := DiskSpaceInfo{}
 
