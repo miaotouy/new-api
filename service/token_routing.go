@@ -3,7 +3,6 @@ package service
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -275,8 +274,4 @@ func tokenContextFloat(c *gin.Context, key constant.ContextKey) (float64, bool) 
 	default:
 		return 0, false
 	}
-}
-
-func routeModeFromContext(c *gin.Context) string {
-	return strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTokenRouteMode))
 }

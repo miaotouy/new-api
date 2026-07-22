@@ -196,6 +196,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
+		if routeBillingErr := refreshTokenRouteBilling(c, relayInfo, tokens, meta); routeBillingErr != nil {
+			newAPIError = routeBillingErr
+			break
+		}
 
 		addUsedChannel(c, channel.Id)
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
@@ -246,6 +250,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
+}
+
+func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
+	if !service.ShouldUseTokenRouting(c) || relayInfo.Billing == nil {
+		return nil
+	}
+	priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+	}
+	if !priceData.FreeModel {
+		if err := relayInfo.Billing.Reserve(priceData.QuotaToPreConsume); err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+		}
+	}
+	relayInfo.PriceData = priceData
+	return nil
 }
 
 var upgrader = websocket.Upgrader{
@@ -404,6 +425,14 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+		if service.ShouldUseTokenRouting(c) {
+			adminInfo["route_mode"] = common.GetContextKeyString(c, constant.ContextKeyTokenRouteMode)
+			adminInfo["auto_route_strategy"] = common.GetContextKeyString(c, constant.ContextKeyTokenAutoRouteStrategy)
+			if maxRatio, ok := common.GetContextKey(c, constant.ContextKeyTokenMaxRatio); ok {
+				adminInfo["max_ratio"] = maxRatio
+			}
+			adminInfo["failover_enabled"] = common.GetContextKeyBool(c, constant.ContextKeyTokenFailoverEnabled)
+		}
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
 			adminInfo["is_multi_key"] = true
