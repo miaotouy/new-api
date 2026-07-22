@@ -226,8 +226,14 @@ func TokenRateLimit() func(c *gin.Context) {
 		}
 		key := fmt.Sprintf("rateLimit:token:%d", tokenID)
 		if common.RedisEnabled {
-			userRedisRateLimiter(c, maxRequests, int64(window), key)
-			return
+			allowed, healthy := tokenRedisRateLimiter(key, maxRequests, int64(window))
+			if healthy {
+				if !allowed {
+					c.Status(http.StatusTooManyRequests)
+					c.Abort()
+				}
+				return
+			}
 		}
 		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
 		if !inMemoryRateLimiter.Request(key, maxRequests, int64(window)) {
@@ -235,4 +241,45 @@ func TokenRateLimit() func(c *gin.Context) {
 			c.Abort()
 		}
 	}
+}
+
+func tokenRedisRateLimiter(key string, maxRequests int, duration int64) (allowed bool, healthy bool) {
+	ctx := context.Background()
+	listLength, err := common.RDB.LLen(ctx, key).Result()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("token rate limit redis read failed: %v", err))
+		return false, false
+	}
+	now := time.Now()
+	if listLength < int64(maxRequests) {
+		if err := common.RDB.LPush(ctx, key, now.Format(timeFormat)).Err(); err != nil {
+			common.SysLog(fmt.Sprintf("token rate limit redis write failed: %v", err))
+			return false, false
+		}
+		_ = common.RDB.Expire(ctx, key, common.RateLimitKeyExpirationDuration).Err()
+		return true, true
+	}
+	oldTimeString, err := common.RDB.LIndex(ctx, key, -1).Result()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("token rate limit redis timestamp read failed: %v", err))
+		return false, false
+	}
+	oldTime, err := time.Parse(timeFormat, oldTimeString)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("token rate limit redis timestamp parse failed: %v", err))
+		return false, false
+	}
+	if int64(now.Sub(oldTime).Seconds()) < duration {
+		_ = common.RDB.Expire(ctx, key, common.RateLimitKeyExpirationDuration).Err()
+		return false, true
+	}
+	pipe := common.RDB.Pipeline()
+	pipe.LPush(ctx, key, now.Format(timeFormat))
+	pipe.LTrim(ctx, key, 0, int64(maxRequests-1))
+	pipe.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
+	if _, err := pipe.Exec(ctx); err != nil {
+		common.SysLog(fmt.Sprintf("token rate limit redis rotate failed: %v", err))
+		return false, false
+	}
+	return true, true
 }
