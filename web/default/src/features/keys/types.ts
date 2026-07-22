@@ -45,6 +45,15 @@ export const apiKeySchema = z.object({
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
+  route_mode: z.enum(['auto', 'manual']).optional().default('auto'),
+  auto_route_strategy: z
+    .enum(['priority', 'price'])
+    .optional()
+    .default('priority'),
+  max_ratio: z.number().optional().default(0),
+  failover_enabled: z.boolean().optional().default(false),
+  rate_limit: z.number().optional().default(0),
+  rate_limit_window_seconds: z.number().optional().default(60),
 })
 
 export type ApiKey = z.infer<typeof apiKeySchema>
@@ -92,6 +101,33 @@ export interface ApiKeyFormData {
   allow_ips: string
   group: string
   cross_group_retry: boolean
+  route_mode: 'auto' | 'manual'
+  auto_route_strategy: 'priority' | 'price'
+  max_ratio: number
+  failover_enabled: boolean
+  rate_limit: number
+  rate_limit_window_seconds: number
+}
+
+export type ApiKeyRouteRule = {
+  id?: number
+  token_id?: number
+  position?: number
+  kind: 'group' | 'channel'
+  group: string
+  channel_id?: number
+  enabled?: boolean
+}
+
+export type ApiKeyRouteOption = {
+  id: number
+  name: string
+  group: string
+  status: number
+  models: string
+  priority: number
+  weight: number
+  response_time: number
 }
 
 // ============================================================================

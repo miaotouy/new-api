@@ -28,6 +28,12 @@ type Token struct {
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
 	Group              string         `json:"group" gorm:"default:''"`
 	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
+	RouteMode          string         `json:"route_mode" gorm:"type:varchar(16)"`
+	AutoRouteStrategy  string         `json:"auto_route_strategy" gorm:"type:varchar(16)"`
+	MaxRatio           float64        `json:"max_ratio"`
+	FailoverEnabled    bool           `json:"failover_enabled"`
+	RateLimit          int            `json:"rate_limit"`
+	RateLimitWindow    int            `json:"rate_limit_window_seconds"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
 }
 
@@ -302,7 +308,8 @@ func (token *Token) Update() (err error) {
 		}
 	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
-		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
+		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
+		"route_mode", "auto_route_strategy", "max_ratio", "failover_enabled", "rate_limit", "rate_limit_window_seconds").Updates(token).Error
 	return err
 }
 
@@ -374,6 +381,9 @@ func DeleteTokenById(id int, userId int) (err error) {
 	token := Token{Id: id, UserId: userId}
 	err = DB.Where(token).First(&token).Error
 	if err != nil {
+		return err
+	}
+	if err = DeleteTokenRouteRules(token.Id); err != nil {
 		return err
 	}
 	return token.Delete()
@@ -461,6 +471,10 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	}
 
 	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Delete(&Token{}).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	if err := tx.Where("token_id IN (?)", ids).Delete(&TokenRouteRule{}).Error; err != nil {
 		tx.Rollback()
 		return 0, err
 	}

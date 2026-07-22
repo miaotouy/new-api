@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -175,6 +176,10 @@ func AddToken(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
 		return
 	}
+	if err := validateTokenRoutingSettings(&token); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	// 非无限额度时，检查额度值是否超出有效范围
 	if !token.UnlimitedQuota {
 		if token.RemainQuota < 0 {
@@ -221,6 +226,12 @@ func AddToken(c *gin.Context) {
 		AllowIps:           token.AllowIps,
 		Group:              token.Group,
 		CrossGroupRetry:    token.CrossGroupRetry,
+		RouteMode:          token.RouteMode,
+		AutoRouteStrategy:  token.AutoRouteStrategy,
+		MaxRatio:           token.MaxRatio,
+		FailoverEnabled:    token.FailoverEnabled,
+		RateLimit:          token.RateLimit,
+		RateLimitWindow:    token.RateLimitWindow,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -230,6 +241,7 @@ func AddToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
+		"data":    buildMaskedTokenResponse(&cleanToken),
 	})
 }
 
@@ -258,6 +270,10 @@ func UpdateToken(c *gin.Context) {
 	}
 	if len(token.Name) > 50 {
 		common.ApiErrorI18n(c, i18n.MsgTokenNameTooLong)
+		return
+	}
+	if err := validateTokenRoutingSettings(&token); err != nil {
+		common.ApiError(c, err)
 		return
 	}
 	if !token.UnlimitedQuota {
@@ -299,6 +315,12 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = token.Group
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		cleanToken.RouteMode = token.RouteMode
+		cleanToken.AutoRouteStrategy = token.AutoRouteStrategy
+		cleanToken.MaxRatio = token.MaxRatio
+		cleanToken.FailoverEnabled = token.FailoverEnabled
+		cleanToken.RateLimit = token.RateLimit
+		cleanToken.RateLimitWindow = token.RateLimitWindow
 	}
 	err = cleanToken.Update()
 	if err != nil {
@@ -310,6 +332,37 @@ func UpdateToken(c *gin.Context) {
 		"message": "",
 		"data":    buildMaskedTokenResponse(cleanToken),
 	})
+}
+
+func validateTokenRoutingSettings(token *model.Token) error {
+	if token == nil {
+		return fmt.Errorf("token 不能为空")
+	}
+	if token.RouteMode == "" {
+		token.RouteMode = "auto"
+	}
+	if token.RouteMode != "auto" && token.RouteMode != "manual" {
+		return fmt.Errorf("route_mode 必须是 auto 或 manual")
+	}
+	if token.AutoRouteStrategy == "" {
+		token.AutoRouteStrategy = "priority"
+	}
+	if token.AutoRouteStrategy != "priority" && token.AutoRouteStrategy != "price" {
+		return fmt.Errorf("auto_route_strategy 必须是 priority 或 price")
+	}
+	if math.IsNaN(token.MaxRatio) || math.IsInf(token.MaxRatio, 0) || token.MaxRatio < 0 || token.MaxRatio > 1000 {
+		return fmt.Errorf("max_ratio 必须在 0 到 1000 之间")
+	}
+	if token.RateLimit < 0 || token.RateLimit > 1000000 {
+		return fmt.Errorf("rate_limit 必须在 0 到 1000000 之间")
+	}
+	if token.RateLimitWindow == 0 {
+		token.RateLimitWindow = 60
+	}
+	if token.RateLimitWindow < 1 || token.RateLimitWindow > 86400 {
+		return fmt.Errorf("rate_limit_window_seconds 必须在 1 到 86400 之间")
+	}
+	return nil
 }
 
 type TokenBatch struct {

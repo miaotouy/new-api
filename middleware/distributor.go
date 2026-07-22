@@ -101,7 +101,20 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+				if service.ShouldUseTokenRouting(c) {
+					channel, selectGroup, err = service.SelectTokenRouteChannel(c, usingGroup, modelRequest.Model, c.Request.URL.Path)
+					if err != nil || channel == nil {
+						message := i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model})
+						if err != nil {
+							message = fmt.Sprintf("%s: %s", message, err.Error())
+						}
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
+						return
+					}
+					if usingGroup == "auto" {
+						common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
+					}
+				} else if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					affinityUsable := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&

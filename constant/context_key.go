@@ -19,6 +19,14 @@ const (
 	ContextKeyTokenModelLimitEnabled ContextKey = "token_model_limit_enabled"
 	ContextKeyTokenModelLimit        ContextKey = "token_model_limit"
 	ContextKeyTokenCrossGroupRetry   ContextKey = "token_cross_group_retry"
+	ContextKeyTokenRouteMode         ContextKey = "token_route_mode"
+	ContextKeyTokenAutoRouteStrategy ContextKey = "token_auto_route_strategy"
+	ContextKeyTokenMaxRatio          ContextKey = "token_max_ratio"
+	ContextKeyTokenFailoverEnabled   ContextKey = "token_failover_enabled"
+	ContextKeyTokenRateLimit         ContextKey = "token_rate_limit"
+	ContextKeyTokenRateLimitWindow   ContextKey = "token_rate_limit_window"
+	ContextKeyTokenRoutePlan         ContextKey = "token_route_plan"
+	ContextKeyTokenRoutingConfigured ContextKey = "token_routing_configured"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

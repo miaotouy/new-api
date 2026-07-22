@@ -304,6 +304,23 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
+	if service.ShouldUseTokenRouting(c) {
+		channel, selectGroup, routeErr := service.SelectNextTokenRouteChannel(c, retryParam.GetRetry())
+		if routeErr != nil {
+			return nil, types.NewError(routeErr, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if channel == nil {
+			return nil, types.NewError(fmt.Errorf("密钥路由候选已耗尽（分组 %s）", selectGroup), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if info.TokenGroup == "auto" {
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
+		}
+		newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
+		if newAPIError != nil {
+			return nil, newAPIError
+		}
+		return channel, nil
+	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
@@ -327,6 +344,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+		return false
+	}
+	if service.ShouldSkipTokenRouteRetry(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {

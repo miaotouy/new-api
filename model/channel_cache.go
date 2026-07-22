@@ -208,6 +208,94 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	return nil, errors.New("channel not found")
 }
 
+// GetSatisfiedChannels returns every enabled channel that can serve the group,
+// model, and request path. The result is deterministic by priority and channel
+// ID so callers can apply their own routing policy without exposing cache state.
+func GetSatisfiedChannels(group string, model string, requestPath string) ([]*Channel, error) {
+	if !common.MemoryCacheEnabled {
+		var abilities []Ability
+		query := DB.Where(commonGroupCol+" = ? AND model = ? AND enabled = ?", group, model, true)
+		if err := query.Find(&abilities).Error; err != nil {
+			return nil, err
+		}
+		if len(abilities) == 0 {
+			normalizedModel := ratio_setting.FormatMatchingModelName(model)
+			if normalizedModel != model {
+				if err := DB.Where(commonGroupCol+" = ? AND model = ? AND enabled = ?", group, normalizedModel, true).Find(&abilities).Error; err != nil {
+					return nil, err
+				}
+			}
+		}
+		ids := make([]int, 0, len(abilities))
+		seen := make(map[int]struct{}, len(abilities))
+		for _, ability := range abilities {
+			if _, ok := seen[ability.ChannelId]; !ok {
+				seen[ability.ChannelId] = struct{}{}
+				ids = append(ids, ability.ChannelId)
+			}
+		}
+		if len(ids) == 0 {
+			return nil, nil
+		}
+		var channels []*Channel
+		if err := DB.Where("id IN ? AND status = ?", ids, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+			return nil, err
+		}
+		return filterAndSortSatisfiedChannels(channels, requestPath, model), nil
+	}
+
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	channels := filterChannelsByRequestPathAndModel(group2model2channels[group][model], requestPath, model)
+	if len(channels) == 0 {
+		normalizedModel := ratio_setting.FormatMatchingModelName(model)
+		channels = filterChannelsByRequestPathAndModel(group2model2channels[group][normalizedModel], requestPath, model)
+	}
+	result := make([]*Channel, 0, len(channels))
+	seen := make(map[int]struct{}, len(channels))
+	for _, channelID := range channels {
+		if _, ok := seen[channelID]; ok {
+			continue
+		}
+		channel, ok := channelsIDM[channelID]
+		if !ok {
+			return nil, fmt.Errorf("数据库一致性错误，渠道# %d 不存在，请联系管理员修复", channelID)
+		}
+		seen[channelID] = struct{}{}
+		result = append(result, channel)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].GetPriority() != result[j].GetPriority() {
+			return result[i].GetPriority() > result[j].GetPriority()
+		}
+		return result[i].Id < result[j].Id
+	})
+	return result, nil
+}
+
+func filterAndSortSatisfiedChannels(channels []*Channel, requestPath string, requestModel string) []*Channel {
+	filtered := make([]*Channel, 0, len(channels))
+	for _, channel := range channels {
+		if channel == nil || channel.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if requestPath != "" && channel.Type == constant.ChannelTypeAdvancedCustom {
+			config := channel.GetOtherSettings().AdvancedCustom
+			if config == nil || !config.SupportsPathForModel(requestPath, requestModel) {
+				continue
+			}
+		}
+		filtered = append(filtered, channel)
+	}
+	sort.SliceStable(filtered, func(i, j int) bool {
+		if filtered[i].GetPriority() != filtered[j].GetPriority() {
+			return filtered[i].GetPriority() > filtered[j].GetPriority()
+		}
+		return filtered[i].Id < filtered[j].Id
+	})
+	return filtered
+}
+
 // filterChannelsByRequestPathAndModel restricts candidates by request path and
 // model. Only Advanced Custom (type 58) channels are path-checked: they are kept
 // only when one of their configured routes matches requestPath and model. All

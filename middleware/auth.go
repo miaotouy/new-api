@@ -464,6 +464,14 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	}
 	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
 	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	common.SetContextKey(c, constant.ContextKeyTokenRouteMode, token.RouteMode)
+	common.SetContextKey(c, constant.ContextKeyTokenAutoRouteStrategy, token.AutoRouteStrategy)
+	common.SetContextKey(c, constant.ContextKeyTokenMaxRatio, token.MaxRatio)
+	common.SetContextKey(c, constant.ContextKeyTokenFailoverEnabled, token.FailoverEnabled || (token.Group == "auto" && token.CrossGroupRetry))
+	common.SetContextKey(c, constant.ContextKeyTokenRateLimit, token.RateLimit)
+	common.SetContextKey(c, constant.ContextKeyTokenRateLimitWindow, token.RateLimitWindow)
+	common.SetContextKey(c, constant.ContextKeyTokenRoutingConfigured,
+		token.RouteMode == "manual" || token.AutoRouteStrategy == "price" || token.MaxRatio > 0 || token.FailoverEnabled)
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

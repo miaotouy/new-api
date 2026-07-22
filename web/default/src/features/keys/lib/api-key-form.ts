@@ -22,7 +22,7 @@ import { z } from 'zod'
 import { parseQuotaFromDollars, quotaUnitsToDollars } from '@/lib/format'
 
 import { DEFAULT_GROUP } from '../constants'
-import { type ApiKeyFormData, type ApiKey } from '../types'
+import type { ApiKeyFormData, ApiKey } from '../types'
 
 // ============================================================================
 // Form Schema
@@ -39,6 +39,12 @@ export function getApiKeyFormSchema(t: TFunction) {
       allow_ips: z.string().optional(),
       group: z.string().optional(),
       cross_group_retry: z.boolean().optional(),
+      route_mode: z.enum(['auto', 'manual']),
+      auto_route_strategy: z.enum(['priority', 'price']),
+      max_ratio: z.number().min(0).max(1000),
+      failover_enabled: z.boolean(),
+      rate_limit: z.number().int().min(0).max(1000000),
+      rate_limit_window_seconds: z.number().int().min(1).max(86400),
       tokenCount: z.number().min(1).optional(),
     })
     .superRefine((data, ctx) => {
@@ -74,6 +80,12 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   allow_ips: '',
   group: DEFAULT_GROUP,
   cross_group_retry: true,
+  route_mode: 'auto',
+  auto_route_strategy: 'priority',
+  max_ratio: 0,
+  failover_enabled: false,
+  rate_limit: 0,
+  rate_limit_window_seconds: 60,
   tokenCount: 1,
 }
 
@@ -84,6 +96,12 @@ export function getApiKeyFormDefaultValues(
     ...API_KEY_FORM_DEFAULT_VALUES,
     group: defaultUseAutoGroup ? 'auto' : DEFAULT_GROUP,
     cross_group_retry: defaultUseAutoGroup,
+    route_mode: 'auto',
+    auto_route_strategy: 'priority',
+    max_ratio: 0,
+    failover_enabled: false,
+    rate_limit: 0,
+    rate_limit_window_seconds: 60,
   }
 }
 
@@ -111,6 +129,12 @@ export function transformFormDataToPayload(
     allow_ips: data.allow_ips || '',
     group: data.group || '',
     cross_group_retry: data.group === 'auto' ? !!data.cross_group_retry : false,
+    route_mode: data.route_mode,
+    auto_route_strategy: data.auto_route_strategy,
+    max_ratio: data.max_ratio,
+    failover_enabled: data.failover_enabled,
+    rate_limit: data.rate_limit,
+    rate_limit_window_seconds: data.rate_limit_window_seconds,
   }
 }
 
@@ -136,6 +160,12 @@ export function transformApiKeyToFormDefaults(
     allow_ips: apiKey.allow_ips || '',
     group: apiKey.group || DEFAULT_GROUP,
     cross_group_retry: !!apiKey.cross_group_retry,
+    route_mode: apiKey.route_mode || 'auto',
+    auto_route_strategy: apiKey.auto_route_strategy || 'priority',
+    max_ratio: apiKey.max_ratio || 0,
+    failover_enabled: !!apiKey.failover_enabled,
+    rate_limit: apiKey.rate_limit || 0,
+    rate_limit_window_seconds: apiKey.rate_limit_window_seconds || 60,
     tokenCount: 1,
   }
 }

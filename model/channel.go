@@ -365,6 +365,15 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool, sortOpti
 	return channels, err
 }
 
+// GetChannelRouteOptions returns channel metadata safe for token route editors.
+// Credentials and override settings are omitted at the query boundary.
+func GetChannelRouteOptions() ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Select("id", "name", "status", "models", commonGroupCol, "priority", "weight", "response_time").
+		Order("priority DESC, id ASC").Find(&channels).Error
+	return channels, err
+}
+
 func GetChannelsByTag(tag string, idSort bool, selectAll bool, sortOptions ...ChannelSortOptions) ([]*Channel, error) {
 	var channels []*Channel
 	order := resolveChannelSortOptions(idSort, sortOptions)

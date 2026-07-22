@@ -52,6 +52,13 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Sheet,
   SheetClose,
   SheetContent,
@@ -67,7 +74,14 @@ import { getUserModels, getUserGroups } from '@/lib/api'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
-import { createApiKey, updateApiKey, getApiKey } from '../api'
+import {
+  createApiKey,
+  getApiKey,
+  getApiKeyRouteOptions,
+  getApiKeyRoutes,
+  updateApiKey,
+  updateApiKeyRoutes,
+} from '../api'
 import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
 import {
   getApiKeyFormSchema,
@@ -76,12 +90,13 @@ import {
   transformFormDataToPayload,
   transformApiKeyToFormDefaults,
 } from '../lib'
-import type { ApiKey } from '../types'
+import type { ApiKey, ApiKeyRouteRule } from '../types'
 import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
 } from './api-key-group-combobox'
 import { useApiKeys } from './api-keys-provider'
+import { TokenRouteEditor } from './token-route-editor'
 
 type ApiKeyMutateDrawerProps = {
   open: boolean
@@ -100,6 +115,7 @@ export function ApiKeysMutateDrawer({
   const { status } = useStatus()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [routeItems, setRouteItems] = useState<ApiKeyRouteRule[]>([])
   const defaultUseAutoGroup = status?.default_use_auto_group === true
 
   // Fetch models
@@ -116,6 +132,13 @@ export function ApiKeysMutateDrawer({
     queryFn: getUserGroups,
     enabled: open,
     staleTime: 0,
+  })
+
+  const { data: routeOptionsData } = useQuery({
+    queryKey: ['token-route-options', currentRow?.id],
+    queryFn: () => getApiKeyRouteOptions(currentRow?.id ?? 0),
+    enabled: open && isUpdate && !!currentRow,
+    staleTime: 30_000,
   })
 
   const models = modelsData?.data || []
@@ -139,15 +162,22 @@ export function ApiKeysMutateDrawer({
   // Load existing data when updating
   useEffect(() => {
     if (open && isUpdate && currentRow) {
-      void getApiKey(currentRow.id).then((result) => {
+      void Promise.all([
+        getApiKey(currentRow.id),
+        getApiKeyRoutes(currentRow.id),
+      ]).then(([result, routesResult]) => {
         if (result.success && result.data) {
           form.reset(transformApiKeyToFormDefaults(result.data))
         }
+        setRouteItems(
+          routesResult.success && routesResult.data ? routesResult.data : []
+        )
       })
     } else if (open && !isUpdate) {
       form.reset(
         getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
       )
+      setRouteItems([])
     }
   }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
 
@@ -168,6 +198,10 @@ export function ApiKeysMutateDrawer({
   }, [groups, form])
 
   const onSubmit = async (data: ApiKeyFormValues) => {
+    if (data.route_mode === 'manual' && routeItems.length === 0) {
+      toast.error(t('Add at least one manual route candidate'))
+      return
+    }
     setIsSubmitting(true)
     try {
       const basePayload = transformFormDataToPayload(data)
@@ -178,6 +212,14 @@ export function ApiKeysMutateDrawer({
           id: currentRow.id,
         })
         if (result.success) {
+          const routeResult = await updateApiKeyRoutes(
+            currentRow.id,
+            data.route_mode === 'manual' ? routeItems : []
+          )
+          if (!routeResult.success) {
+            toast.error(routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED))
+            return
+          }
           toast.success(t(SUCCESS_MESSAGES.API_KEY_UPDATED))
           onOpenChange(false)
           triggerRefresh()
@@ -199,6 +241,18 @@ export function ApiKeysMutateDrawer({
           })
           if (result.success) {
             successCount++
+            if (result.data?.id) {
+              const routeResult = await updateApiKeyRoutes(
+                result.data.id,
+                data.route_mode === 'manual' ? routeItems : []
+              )
+              if (!routeResult.success) {
+                toast.error(
+                  routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED)
+                )
+                break
+              }
+            }
           } else {
             toast.error(result.message || t(ERROR_MESSAGES.CREATE_FAILED))
             break
@@ -249,6 +303,11 @@ export function ApiKeysMutateDrawer({
     : t('Enter quota in {{currency}}', { currency: currencyLabel })
   const selectedGroup = form.watch('group')
   const unlimitedQuota = form.watch('unlimited_quota')
+  const routeMode = form.watch('route_mode')
+  const routeGroups = groups
+    .map((group) => group.value)
+    .filter((group) => group !== 'auto')
+  const routeOptions = routeOptionsData?.data ?? []
 
   return (
     <Sheet
@@ -257,6 +316,7 @@ export function ApiKeysMutateDrawer({
         onOpenChange(v)
         if (!v) {
           form.reset()
+          setRouteItems([])
         }
       }}
     >
@@ -435,6 +495,202 @@ export function ApiKeysMutateDrawer({
                   )}
                 />
               )}
+            </SideDrawerSection>
+
+            <SideDrawerSection>
+              <SideDrawerSectionHeader
+                title={t('Routing Settings')}
+                description={t(
+                  'Control channel selection and failover for this key'
+                )}
+                icon={<Settings2 className='size-4' />}
+                iconTone='info'
+              />
+              <FormField
+                control={form.control}
+                name='route_mode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Routing mode')}</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value='auto'>{t('Automatic')}</SelectItem>
+                        <SelectItem value='manual'>
+                          {t('Manual order')}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {routeMode === 'auto' && (
+                <FormField
+                  control={form.control}
+                  name='auto_route_strategy'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Automatic route strategy')}</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger className='w-full'>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value='priority'>
+                            {t('Priority and weight')}
+                          </SelectItem>
+                          <SelectItem value='price'>
+                            {t('Lowest group ratio')}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              <FormField
+                control={form.control}
+                name='max_ratio'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Maximum group ratio')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type='number'
+                        min='0'
+                        max='1000'
+                        step='0.01'
+                        onChange={(event) =>
+                          field.onChange(
+                            Number.parseFloat(event.target.value) || 0
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Set 0 for no ratio limit. Candidates above this ratio are skipped.'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='failover_enabled'
+                render={({ field }) => (
+                  <FormItem className={sideDrawerSwitchItemClassName()}>
+                    <div className='flex flex-col gap-0.5'>
+                      <FormLabel className='text-sm'>
+                        {t('Enable failover')}
+                      </FormLabel>
+                      <FormDescription className='text-xs'>
+                        {t(
+                          'Try the next eligible group or channel after a retryable upstream failure.'
+                        )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {routeMode === 'manual' && (
+                <FormItem>
+                  <FormLabel>{t('Manual fallback order')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Candidates are tried from top to bottom. Disabled channels are skipped at request time.'
+                    )}
+                  </FormDescription>
+                  <TokenRouteEditor
+                    groups={routeGroups}
+                    channels={routeOptions}
+                    items={routeItems}
+                    onChange={setRouteItems}
+                    disabled={isSubmitting}
+                  />
+                  {!isUpdate && (
+                    <FormDescription>
+                      {t(
+                        'Save the key first to choose fixed channels; group routes are available immediately.'
+                      )}
+                    </FormDescription>
+                  )}
+                </FormItem>
+              )}
+
+              <div className='grid gap-3 sm:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='rate_limit'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Requests per window')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='0'
+                          max='1000000'
+                          step='1'
+                          onChange={(event) =>
+                            field.onChange(
+                              Number.parseInt(event.target.value, 10) || 0
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='rate_limit_window_seconds'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('Window seconds')}</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='1'
+                          max='86400'
+                          step='1'
+                          onChange={(event) =>
+                            field.onChange(
+                              Number.parseInt(event.target.value, 10) || 60
+                            )
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </SideDrawerSection>
 
             <SideDrawerSection>

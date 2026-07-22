@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/gin-gonic/gin"
 )
 
@@ -202,4 +203,36 @@ func SearchRateLimit() func(c *gin.Context) {
 		return defNext
 	}
 	return userRateLimitFactory(common.SearchRateLimitNum, common.SearchRateLimitDuration, "SR")
+}
+
+// TokenRateLimit applies the per-token request budget configured on the
+// authenticated API key. It is intentionally a no-op for legacy keys with a
+// zero limit and must run after TokenAuth has populated the token context.
+func TokenRateLimit() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		maxRequests := common.GetContextKeyInt(c, constant.ContextKeyTokenRateLimit)
+		if maxRequests <= 0 {
+			return
+		}
+		window := common.GetContextKeyInt(c, constant.ContextKeyTokenRateLimitWindow)
+		if window <= 0 {
+			window = 60
+		}
+		tokenID := common.GetContextKeyInt(c, constant.ContextKeyTokenId)
+		if tokenID <= 0 {
+			c.Status(http.StatusUnauthorized)
+			c.Abort()
+			return
+		}
+		key := fmt.Sprintf("rateLimit:token:%d", tokenID)
+		if common.RedisEnabled {
+			userRedisRateLimiter(c, maxRequests, int64(window), key)
+			return
+		}
+		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
+		if !inMemoryRateLimiter.Request(key, maxRequests, int64(window)) {
+			c.Status(http.StatusTooManyRequests)
+			c.Abort()
+		}
+	}
 }

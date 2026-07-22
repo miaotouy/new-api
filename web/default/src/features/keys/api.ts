@@ -25,6 +25,8 @@ import type {
   GetApiKeysResponse,
   SearchApiKeysParams,
   ApiKeyFormData,
+  ApiKeyRouteOption,
+  ApiKeyRouteRule,
 } from './types'
 
 // ============================================================================
@@ -114,5 +116,27 @@ export async function fetchTokenKeysBatch(ids: number[]): Promise<{
   data?: { keys: Record<number, string> }
 }> {
   const res = await api.post('/api/token/batch/keys', { ids })
+  return res.data
+}
+
+export async function getApiKeyRoutes(
+  id: number
+): Promise<ApiResponse<ApiKeyRouteRule[]>> {
+  const res = await api.get(`/api/token/${id}/routes`)
+  return res.data
+}
+
+export async function updateApiKeyRoutes(
+  id: number,
+  items: ApiKeyRouteRule[]
+): Promise<ApiResponse<ApiKeyRouteRule[]>> {
+  const res = await api.put(`/api/token/${id}/routes`, { items })
+  return res.data
+}
+
+export async function getApiKeyRouteOptions(
+  id: number
+): Promise<ApiResponse<ApiKeyRouteOption[]>> {
+  const res = await api.get(`/api/token/${id}/route-options`)
   return res.data
 }
