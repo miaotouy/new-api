@@ -1,0 +1,39 @@
+# Podman development workflow.
+#
+# Usage:
+#   make -f makefile.podman dev
+#   make -f makefile.podman dev-api
+#   make -f makefile.podman down
+#
+# The compose file is shared with the Docker workflow. Only the container
+# runtime command differs, so the existing makefile and Docker setup remain
+# unchanged.
+
+WEB_DIR = ./web/default
+DEV_COMPOSE_FILE ?= docker-compose.dev.yml
+DEV_WEB_DEFAULT_PORT ?= 3001
+PODMAN ?= podman
+PODMAN_COMPOSE ?= $(PODMAN) compose
+
+.PHONY: dev podman-machine dev-api dev-api-rebuild dev-web logs down
+
+podman-machine:
+	@$(PODMAN) machine start
+
+dev-api: podman-machine
+	@$(PODMAN_COMPOSE) -f $(DEV_COMPOSE_FILE) up -d
+
+dev-api-rebuild: podman-machine
+	@$(PODMAN_COMPOSE) -f $(DEV_COMPOSE_FILE) up -d --build new-api
+
+dev-web:
+	@cd ./web && bun install --filter ./default
+	@cd $(WEB_DIR) && bun run dev -- --host 0.0.0.0 --port $(DEV_WEB_DEFAULT_PORT)
+
+dev: dev-api dev-web
+
+logs:
+	@$(PODMAN_COMPOSE) -f $(DEV_COMPOSE_FILE) logs -f new-api
+
+down:
+	@$(PODMAN_COMPOSE) -f $(DEV_COMPOSE_FILE) down
