@@ -253,14 +253,18 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 }
 
 func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
-	if !service.ShouldUseTokenRouting(c) || relayInfo.Billing == nil {
+	if !service.ShouldUseTokenRouting(c) {
 		return nil
 	}
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 	}
-	if !priceData.FreeModel {
+	if !priceData.FreeModel && relayInfo.Billing == nil {
+		if apiErr := service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo); apiErr != nil {
+			return apiErr
+		}
+	} else if !priceData.FreeModel {
 		if err := relayInfo.Billing.Reserve(priceData.QuotaToPreConsume); err != nil {
 			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
 		}
@@ -270,22 +274,54 @@ func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, 
 }
 
 func refreshTokenTaskRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
-	if !service.ShouldUseTokenRouting(c) || relayInfo.Billing == nil || relayInfo.PriceData.FreeModel {
+	if !service.ShouldUseTokenRouting(c) {
 		return nil
 	}
 	groupRatioInfo := helper.HandleGroupRatio(c, relayInfo)
 	previousRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
-	if previousRatio == groupRatioInfo.GroupRatio {
+	if previousRatio == groupRatioInfo.GroupRatio && relayInfo.Billing != nil {
 		return nil
 	}
 	if previousRatio <= 0 {
-		return types.NewError(fmt.Errorf("无法在分组倍率为零时重算任务额度"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		if relayInfo.Billing != nil {
+			return types.NewError(fmt.Errorf("无法在分组倍率为零时重算任务额度"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
+		priceData, err := helper.ModelPriceHelperPerCall(c, relayInfo)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
+		for key, ratio := range relayInfo.PriceData.OtherRatios() {
+			priceData.AddOtherRatio(key, ratio)
+		}
+		quotaFloat := priceData.ApplyOtherRatiosToFloat(float64(priceData.Quota))
+		quota, clamp := common.QuotaFromFloatChecked(quotaFloat)
+		if clamp != nil {
+			relayInfo.QuotaClamp = clamp
+			return types.NewErrorWithStatusCode(clamp, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		priceData.Quota = quota
+		priceData.GroupRatioInfo = groupRatioInfo
+		relayInfo.PriceData = priceData
+		relayInfo.ForcePreConsume = true
+		if apiErr := service.PreConsumeBilling(c, quota, relayInfo); apiErr != nil {
+			return apiErr
+		}
+		return nil
 	}
 	quotaFloat := float64(relayInfo.PriceData.Quota) / previousRatio * groupRatioInfo.GroupRatio
 	quota, clamp := common.QuotaFromFloatChecked(quotaFloat)
 	if clamp != nil {
 		relayInfo.QuotaClamp = clamp
 		return types.NewErrorWithStatusCode(clamp, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
+	if relayInfo.Billing == nil {
+		relayInfo.PriceData.GroupRatioInfo = groupRatioInfo
+		relayInfo.PriceData.Quota = quota
+		relayInfo.ForcePreConsume = true
+		if apiErr := service.PreConsumeBilling(c, quota, relayInfo); apiErr != nil {
+			return apiErr
+		}
+		return nil
 	}
 	if err := relayInfo.Billing.Reserve(quota); err != nil {
 		return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
