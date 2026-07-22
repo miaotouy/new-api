@@ -269,6 +269,32 @@ func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, 
 	return nil
 }
 
+func refreshTokenTaskRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if !service.ShouldUseTokenRouting(c) || relayInfo.Billing == nil || relayInfo.PriceData.FreeModel {
+		return nil
+	}
+	groupRatioInfo := helper.HandleGroupRatio(c, relayInfo)
+	previousRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	if previousRatio == groupRatioInfo.GroupRatio {
+		return nil
+	}
+	if previousRatio <= 0 {
+		return types.NewError(fmt.Errorf("无法在分组倍率为零时重算任务额度"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+	}
+	quotaFloat := float64(relayInfo.PriceData.Quota) / previousRatio * groupRatioInfo.GroupRatio
+	quota, clamp := common.QuotaFromFloatChecked(quotaFloat)
+	if clamp != nil {
+		relayInfo.QuotaClamp = clamp
+		return types.NewErrorWithStatusCode(clamp, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
+	if err := relayInfo.Billing.Reserve(quota); err != nil {
+		return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+	}
+	relayInfo.PriceData.GroupRatioInfo = groupRatioInfo
+	relayInfo.PriceData.Quota = quota
+	return nil
+}
+
 var upgrader = websocket.Upgrader{
 	Subprotocols: []string{"realtime"}, // WS 握手支持的协议，如果有使用 Sec-WebSocket-Protocol，则必须在此声明对应的 Protocol TODO add other protocol
 	CheckOrigin: func(r *http.Request) bool {
@@ -583,6 +609,10 @@ func RelayTask(c *gin.Context) {
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
 				break
 			}
+		}
+		if routeBillingErr := refreshTokenTaskRouteBilling(c, relayInfo); routeBillingErr != nil {
+			taskErr = service.TaskErrorWrapperLocal(routeBillingErr.Err, "route_billing_failed", routeBillingErr.StatusCode)
+			break
 		}
 
 		addUsedChannel(c, channel.Id)
