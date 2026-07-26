@@ -111,9 +111,7 @@ func Distribute() func(c *gin.Context) {
 						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, message, types.ErrorCodeModelNotFound)
 						return
 					}
-					if usingGroup == "auto" {
-						common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
-					}
+					common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
 				} else if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					affinityUsable := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)

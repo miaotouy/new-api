@@ -155,13 +155,21 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
 	}
+	preConsumePriceData := priceData
+	if service.ShouldUseTokenRouting(c) {
+		preConsumePriceData, err = maxTokenRoutePreConsumePriceData(c, relayInfo, tokens, meta)
+		if err != nil {
+			newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+			return
+		}
+	}
 
 	// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
-	if priceData.FreeModel {
+	if preConsumePriceData.FreeModel {
 		logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
 	} else {
-		newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
+		newAPIError = service.PreConsumeBilling(c, preConsumePriceData.QuotaToPreConsume, relayInfo)
 		if newAPIError != nil {
 			return
 		}
@@ -232,6 +240,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
+		service.RecordTokenRouteFallback(c, newAPIError)
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
@@ -250,6 +259,33 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
+}
+
+func maxTokenRoutePreConsumePriceData(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
+	groups := service.GetTokenRouteCandidateGroups(c)
+	if len(groups) == 0 {
+		return helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
+	}
+
+	selectedGroup := relayInfo.UsingGroup
+	maxQuota := -1
+	var maxPriceData types.PriceData
+	for _, group := range groups {
+		common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
+		priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
+		if err != nil {
+			common.SetContextKey(c, constant.ContextKeyAutoGroup, selectedGroup)
+			relayInfo.UsingGroup = selectedGroup
+			return types.PriceData{}, err
+		}
+		if priceData.QuotaToPreConsume > maxQuota {
+			maxQuota = priceData.QuotaToPreConsume
+			maxPriceData = priceData
+		}
+	}
+	common.SetContextKey(c, constant.ContextKeyAutoGroup, selectedGroup)
+	relayInfo.UsingGroup = selectedGroup
+	return maxPriceData, nil
 }
 
 func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
@@ -395,9 +431,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if channel == nil {
 			return nil, types.NewError(fmt.Errorf("密钥路由候选已耗尽（分组 %s）", selectGroup), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 		}
-		if info.TokenGroup == "auto" {
-			common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
-		}
+		common.SetContextKey(c, constant.ContextKeyAutoGroup, selectGroup)
 		newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 		if newAPIError != nil {
 			return nil, newAPIError
@@ -487,14 +521,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
-		if service.ShouldUseTokenRouting(c) {
-			adminInfo["route_mode"] = common.GetContextKeyString(c, constant.ContextKeyTokenRouteMode)
-			adminInfo["auto_route_strategy"] = common.GetContextKeyString(c, constant.ContextKeyTokenAutoRouteStrategy)
-			if maxRatio, ok := common.GetContextKey(c, constant.ContextKeyTokenMaxRatio); ok {
-				adminInfo["max_ratio"] = maxRatio
-			}
-			adminInfo["failover_enabled"] = common.GetContextKeyBool(c, constant.ContextKeyTokenFailoverEnabled)
-		}
+		service.AppendTokenRouteAdminInfo(c, adminInfo)
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
 			adminInfo["is_multi_key"] = true

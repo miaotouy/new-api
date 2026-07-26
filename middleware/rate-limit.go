@@ -243,43 +243,22 @@ func TokenRateLimit() func(c *gin.Context) {
 	}
 }
 
+const tokenRateLimitLua = `
+local requests = redis.call("INCR", KEYS[1])
+if requests == 1 then
+  redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+if requests > tonumber(ARGV[1]) then
+  return 0
+end
+return 1
+`
+
 func tokenRedisRateLimiter(key string, maxRequests int, duration int64) (allowed bool, healthy bool) {
-	ctx := context.Background()
-	listLength, err := common.RDB.LLen(ctx, key).Result()
+	result, err := common.RDB.Eval(context.Background(), tokenRateLimitLua, []string{key}, maxRequests, duration).Int()
 	if err != nil {
-		common.SysLog(fmt.Sprintf("token rate limit redis read failed: %v", err))
+		common.SysLog(fmt.Sprintf("token rate limit redis script failed: %v", err))
 		return false, false
 	}
-	now := time.Now()
-	if listLength < int64(maxRequests) {
-		if err := common.RDB.LPush(ctx, key, now.Format(timeFormat)).Err(); err != nil {
-			common.SysLog(fmt.Sprintf("token rate limit redis write failed: %v", err))
-			return false, false
-		}
-		_ = common.RDB.Expire(ctx, key, common.RateLimitKeyExpirationDuration).Err()
-		return true, true
-	}
-	oldTimeString, err := common.RDB.LIndex(ctx, key, -1).Result()
-	if err != nil {
-		common.SysLog(fmt.Sprintf("token rate limit redis timestamp read failed: %v", err))
-		return false, false
-	}
-	oldTime, err := time.Parse(timeFormat, oldTimeString)
-	if err != nil {
-		common.SysLog(fmt.Sprintf("token rate limit redis timestamp parse failed: %v", err))
-		return false, false
-	}
-	if int64(now.Sub(oldTime).Seconds()) < duration {
-		_ = common.RDB.Expire(ctx, key, common.RateLimitKeyExpirationDuration).Err()
-		return false, true
-	}
-	pipe := common.RDB.Pipeline()
-	pipe.LPush(ctx, key, now.Format(timeFormat))
-	pipe.LTrim(ctx, key, 0, int64(maxRequests-1))
-	pipe.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
-	if _, err := pipe.Exec(ctx); err != nil {
-		common.SysLog(fmt.Sprintf("token rate limit redis rotate failed: %v", err))
-		return false, false
-	}
-	return true, true
+	return result == 1, true
 }

@@ -79,7 +79,7 @@ export const API_KEY_FORM_DEFAULT_VALUES: ApiKeyFormValues = {
   model_limits: [],
   allow_ips: '',
   group: DEFAULT_GROUP,
-  cross_group_retry: true,
+  cross_group_retry: false,
   route_mode: 'auto',
   auto_route_strategy: 'priority',
   max_ratio: 0,
@@ -95,7 +95,7 @@ export function getApiKeyFormDefaultValues(
   return {
     ...API_KEY_FORM_DEFAULT_VALUES,
     group: defaultUseAutoGroup ? 'auto' : DEFAULT_GROUP,
-    cross_group_retry: defaultUseAutoGroup,
+    cross_group_retry: false,
     route_mode: 'auto',
     auto_route_strategy: 'priority',
     max_ratio: 0,

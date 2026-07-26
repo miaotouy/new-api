@@ -24,14 +24,15 @@ type tokenRouteRulesInput struct {
 }
 
 type tokenRouteChannelOption struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	Group        string `json:"group"`
-	Status       int    `json:"status"`
-	Models       string `json:"models"`
-	Priority     int64  `json:"priority"`
-	Weight       int    `json:"weight"`
-	ResponseTime int    `json:"response_time"`
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	Group        string  `json:"group"`
+	Status       int     `json:"status"`
+	Models       string  `json:"models"`
+	Priority     int64   `json:"priority"`
+	Weight       int     `json:"weight"`
+	ResponseTime int     `json:"response_time"`
+	GroupRatio   float64 `json:"group_ratio"`
 }
 
 func GetTokenRoutes(c *gin.Context) {
@@ -173,6 +174,7 @@ func GetTokenRouteOptions(c *gin.Context) {
 				Priority:     channel.GetPriority(),
 				Weight:       channel.GetWeight(),
 				ResponseTime: channel.ResponseTime,
+				GroupRatio:   service.GetUserGroupRatio(userGroup, group),
 			})
 		}
 	}

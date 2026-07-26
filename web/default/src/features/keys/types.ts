@@ -128,6 +128,7 @@ export type ApiKeyRouteOption = {
   priority: number
   weight: number
   response_time: number
+  group_ratio: number
 }
 
 // ============================================================================

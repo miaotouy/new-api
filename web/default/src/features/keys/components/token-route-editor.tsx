@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -25,6 +25,7 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
   const { t } = useTranslation()
   const [kind, setKind] = useState<'group' | 'channel'>('group')
   const [selectedValue, setSelectedValue] = useState('')
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
 
   const availableChannels = useMemo(
     () => props.channels.filter((channel) => channel.status === 1),
@@ -60,9 +61,8 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
     setSelectedValue('')
   }
 
-  const moveItem = (index: number, offset: number) => {
-    const target = index + offset
-    if (target < 0 || target >= props.items.length) return
+  const moveItem = (index: number, target: number) => {
+    if (index === target || target < 0 || target >= props.items.length) return
     const next = [...props.items]
     const [item] = next.splice(index, 1)
     next.splice(target, 0, item)
@@ -104,7 +104,7 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
                 ))
               : availableChannels.map((channel) => (
                   <SelectItem key={channel.id} value={String(channel.id)}>
-                    {channel.name} · {channel.group} · #{channel.id}
+                    {channel.name} · {channel.group} · ×{channel.group_ratio} · #{channel.id}
                   </SelectItem>
                 ))}
           </SelectContent>
@@ -129,24 +129,62 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
       ) : (
         <ol className='flex flex-col gap-2'>
           {props.items.map((item, index) => {
+            const channel =
+              item.kind === 'channel'
+                ? props.channels.find(
+                    (option) =>
+                      option.id === item.channel_id && option.group === item.group
+                  )
+                : undefined
             const label =
               item.kind === 'group'
                 ? `${t('Group')}: ${item.group}`
-                : `${t('Channel')}: ${item.group} · #${item.channel_id}`
+                : `${t('Channel')}: ${channel?.name || `#${item.channel_id}`} · ${item.group}`
             return (
               <li
                 key={`${item.kind}-${item.group}-${item.channel_id ?? index}`}
                 className='bg-muted/40 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm'
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (draggedIndex !== null) moveItem(draggedIndex, index)
+                  setDraggedIndex(null)
+                }}
               >
+                <span
+                  className='text-muted-foreground cursor-grab touch-none active:cursor-grabbing'
+                  draggable={!props.disabled}
+                  onDragStart={() => setDraggedIndex(index)}
+                  onDragEnd={() => setDraggedIndex(null)}
+                  aria-label={t('Manual fallback order')}
+                >
+                  <GripVertical className='size-4' />
+                </span>
                 <span className='text-muted-foreground w-5 text-center text-xs tabular-nums'>
                   {index + 1}
                 </span>
-                <span className='min-w-0 flex-1 truncate'>{label}</span>
+                <div className='min-w-0 flex-1'>
+                  <div className='truncate'>{label}</div>
+                  {item.kind === 'group' ? (
+                    <div className='text-muted-foreground text-xs'>
+                      {t('Group ratios')}: ×
+                      {props.channels.find((option) => option.group === item.group)
+                        ?.group_ratio ?? 1}
+                    </div>
+                  ) : channel ? (
+                    <div className='text-muted-foreground truncate text-xs'>
+                      {channel.status !== 1 ? `${t('Disabled')} · ` : ''}
+                      {t('Models')}: {channel.models || '-'} · ×
+                      {channel.group_ratio}
+                    </div>
+                  ) : (
+                    <div className='text-destructive text-xs'>{t('Disabled')}</div>
+                  )}
+                </div>
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon-xs'
-                  onClick={() => moveItem(index, -1)}
+                  onClick={() => moveItem(index, index - 1)}
                   disabled={props.disabled || index === 0}
                   title={t('Move route up')}
                   aria-label={t('Move route up')}
@@ -157,7 +195,7 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
                   type='button'
                   variant='ghost'
                   size='icon-xs'
-                  onClick={() => moveItem(index, 1)}
+                  onClick={() => moveItem(index, index + 1)}
                   disabled={props.disabled || index === props.items.length - 1}
                   title={t('Move route down')}
                   aria-label={t('Move route down')}
