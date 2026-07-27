@@ -943,6 +943,13 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	if _, ok := requestData["test_request_config"]; ok {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "test_request_config must be updated through the channel test config endpoint",
+		})
+		return
+	}
 	clearChannelReadOnlyFields(&channel, requestData)
 
 	// 使用统一的校验函数

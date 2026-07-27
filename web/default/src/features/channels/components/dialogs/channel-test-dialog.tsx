@@ -95,10 +95,13 @@ import {
 } from '../../lib'
 import type {
   Channel,
+  ChannelTestContentOverride,
+  ChannelTestEndpoint,
   GetChannelsResponse,
   SearchChannelsResponse,
 } from '../../types'
 import { useChannels } from '../channels-provider'
+import { ChannelTestContentSheet } from './channel-test-content-sheet'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -334,6 +337,10 @@ function ChannelTestDialogContent({
   > | null>(null)
   const [endpointType, setEndpointType] = useState('auto')
   const [isStreamTest, setIsStreamTest] = useState(false)
+  const [isTestContentSheetOpen, setIsTestContentSheetOpen] = useState(false)
+  const [testRequestOverrides, setTestRequestOverrides] = useState<
+    Partial<Record<ChannelTestEndpoint, ChannelTestContentOverride>>
+  >({})
   const [searchTerm, setSearchTerm] = useState('')
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
@@ -401,6 +408,8 @@ function ChannelTestDialogContent({
     batchStopRequestedRef.current = true
     setEndpointType('auto')
     setIsStreamTest(false)
+    setIsTestContentSheetOpen(false)
+    setTestRequestOverrides({})
     setSearchTerm('')
     setTestResults({})
     setRowSelection({})
@@ -562,6 +571,7 @@ function ChannelTestDialogContent({
             testModel: model,
             endpointType: endpointType === 'auto' ? undefined : endpointType,
             stream: effectiveStreamTest || undefined,
+            testRequestOverrides,
             silent,
           },
           (success, responseTime, error, errorCode) => {
@@ -600,6 +610,7 @@ function ChannelTestDialogContent({
       currentRow,
       endpointType,
       effectiveStreamTest,
+      testRequestOverrides,
       markModelTesting,
       refreshChannelLists,
       t,
@@ -1033,6 +1044,23 @@ function ChannelTestDialogContent({
               </p>
             </div>
             <div className='grid gap-2'>
+              <Label>{t('Test Content')}</Label>
+              <Button
+                type='button'
+                variant='outline'
+                className='w-fit'
+                onClick={() => setIsTestContentSheetOpen(true)}
+              >
+                <Settings className='mr-2 size-4' />
+                {Object.keys(testRequestOverrides).length > 0
+                  ? t('Test content adjusted')
+                  : t('Test Content')}
+              </Button>
+              <p className='text-muted-foreground text-xs'>
+                {t('Configure content without changing channel defaults.')}
+              </p>
+            </div>
+            <div className='grid gap-2'>
               <Label htmlFor='stream-toggle'>{t('Stream Mode')}</Label>
               <div className='flex items-center gap-2'>
                 <Switch
@@ -1161,6 +1189,14 @@ function ChannelTestDialogContent({
           </div>
         </div>
       </Dialog>
+      <ChannelTestContentSheet
+        open={isTestContentSheetOpen}
+        onOpenChange={setIsTestContentSheetOpen}
+        channelId={currentChannelId}
+        endpointType={endpointType}
+        sessionOverrides={testRequestOverrides}
+        onApply={setTestRequestOverrides}
+      />
       <ConfirmDialog
         open={isDeleteFailedDialogOpen}
         onOpenChange={setIsDeleteFailedDialogOpen}

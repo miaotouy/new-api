@@ -33,6 +33,7 @@ import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
 import { Settings } from 'lucide-react';
 import { copy, showError, showInfo, showSuccess } from '../../../../helpers';
 import { MODEL_TABLE_PAGE_SIZE } from '../../../../constants';
+import TestContentConfigModal from './TestContentConfigModal';
 
 const ModelTestModal = ({
   showModelTestModal,
@@ -58,6 +59,7 @@ const ModelTestModal = ({
   t,
 }) => {
   const hasChannel = Boolean(currentTestChannel);
+  const [showTestContentConfig, setShowTestContentConfig] = React.useState(false);
   const streamToggleDisabled = [
     'embeddings',
     'image-generation',
@@ -248,7 +250,8 @@ const ModelTestModal = ({
   })();
 
   return (
-    <Modal
+    <>
+      <Modal
       title={
         hasChannel ? (
           <div className='flex flex-col gap-2 w-full'>
@@ -328,6 +331,13 @@ const ModelTestModal = ({
                 aria-label={t('流式')}
               />
             </div>
+            <Button
+              type='tertiary'
+              icon={<Settings size={14} />}
+              onClick={() => setShowTestContentConfig(true)}
+            >
+              {t('配置')} {t('内容')}
+            </Button>
           </div>
 
           <Banner
@@ -389,7 +399,16 @@ const ModelTestModal = ({
           />
         </div>
       )}
-    </Modal>
+      </Modal>
+      <TestContentConfigModal
+        visible={showTestContentConfig}
+        onCancel={() => setShowTestContentConfig(false)}
+        channel={currentTestChannel}
+        endpointType={selectedEndpointType}
+        isMobile={isMobile}
+        t={t}
+      />
+    </>
   );
 };
 

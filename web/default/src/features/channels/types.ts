@@ -179,10 +179,56 @@ export interface ChannelOpsResponse {
   }
 }
 
+export type ChannelTestEndpoint =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'openai-response'
+  | 'openai-response-compact'
+  | 'embeddings'
+  | 'image-generation'
+  | 'jina-rerank'
+
+export type ChannelTestContentSource = 'inherit' | 'builtin' | 'custom'
+
+export interface ChannelTestContentOverride {
+  mode?: 'builtin' | 'custom'
+  content?: string
+  input?: string
+  prompt?: string
+  query?: string
+  documents?: string[]
+}
+
+export interface ChannelTestRequestPayload {
+  model?: string
+  endpoint_type?: string
+  stream?: boolean
+  test_request_overrides?: Partial<
+    Record<ChannelTestEndpoint, ChannelTestContentOverride>
+  >
+}
+
+export interface ChannelTestConfig {
+  version: number
+  overrides: Partial<Record<ChannelTestEndpoint, ChannelTestContentOverride>>
+}
+
+export interface ChannelTestConfigResponse {
+  success: boolean
+  message?: string
+  data?: {
+    version: number
+    builtin_overrides: Record<ChannelTestEndpoint, ChannelTestContentOverride>
+    overrides: Partial<Record<ChannelTestEndpoint, ChannelTestContentOverride>>
+  }
+}
+
 export interface ChannelTestResponse {
   success: boolean
   message?: string
   error_code?: string
+  endpoint_type?: ChannelTestEndpoint
   time?: number
   data?: {
     response_time?: number

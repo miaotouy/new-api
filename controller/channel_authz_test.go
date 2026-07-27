@@ -160,8 +160,8 @@ func TestChannelStatusValidation(t *testing.T) {
 
 // TestChannelFieldsAreClassified guards the fail-closed sensitivity check: every
 // JSON field of PatchChannel (including the embedded model.Channel) must be listed
-// in channelSensitiveFields, channelNonSensitiveFields, or
-// channelOperationalFields. A newly added field that is left unclassified will
+// in channelSensitiveFields, channelNonSensitiveFields, channelOperationalFields,
+// or channelDedicatedFields. A newly added field that is left unclassified will
 // fail this test, forcing a conscious permission decision instead of silently
 // defaulting either way.
 func TestChannelFieldsAreClassified(t *testing.T) {
@@ -173,6 +173,9 @@ func TestChannelFieldsAreClassified(t *testing.T) {
 			return true
 		}
 		if _, ok := channelOperationalFields[name]; ok {
+			return true
+		}
+		if _, ok := channelDedicatedFields[name]; ok {
 			return true
 		}
 		_, ok := channelReadOnlyFields[name]
@@ -199,6 +202,6 @@ func TestChannelFieldsAreClassified(t *testing.T) {
 
 	for _, name := range collect(reflect.TypeOf(PatchChannel{})) {
 		assert.Truef(t, classified(name),
-			"channel field %q is not classified; add it to channelSensitiveFields, channelNonSensitiveFields, channelOperationalFields, or channelReadOnlyFields in channel_authz.go", name)
+			"channel field %q is not classified; add it to channelSensitiveFields, channelNonSensitiveFields, channelOperationalFields, channelDedicatedFields, or channelReadOnlyFields in channel_authz.go", name)
 	}
 }

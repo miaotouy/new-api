@@ -15,6 +15,9 @@ import (
 func TestChannelStatusRoutesUseOperatePermission(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPost, "/:id/status", authz.ChannelOperate, controller.UpdateChannelStatus)
 	assertChannelRoutePermission(t, http.MethodPost, "/status/batch", authz.ChannelOperate, controller.BatchUpdateChannelStatus)
+	assertChannelRoutePermission(t, http.MethodGet, "/test/:id/config", authz.ChannelOperate, controller.GetChannelTestConfig)
+	assertChannelRoutePermission(t, http.MethodPost, "/test/:id", authz.ChannelOperate, controller.TestChannelWithRequest)
+	assertChannelRoutePermission(t, http.MethodPut, "/test/:id/config", authz.ChannelWrite, controller.UpdateChannelTestConfig)
 	assertChannelRoutePermission(t, http.MethodPut, "/", authz.ChannelWrite, controller.UpdateChannel)
 }
 

@@ -48,6 +48,9 @@ func channelHasSensitiveChanges(channel *PatchChannel, origin *model.Channel, re
 		if _, ok := channelOperationalFields[field]; ok {
 			continue
 		}
+		if _, ok := channelDedicatedFields[field]; ok {
+			continue
+		}
 		if _, ok := channelReadOnlyFields[field]; ok {
 			continue
 		}
@@ -77,6 +80,12 @@ var channelSensitiveFields = map[string]struct{}{
 // of the general channel edit endpoint.
 var channelOperationalFields = map[string]struct{}{
 	"status": {},
+}
+
+// channelDedicatedFields lists fields that can only be changed through their
+// dedicated endpoints, where domain-specific validation is enforced.
+var channelDedicatedFields = map[string]struct{}{
+	"test_request_config": {},
 }
 
 // channelReadOnlyFields lists server-managed/accounting fields that the general
@@ -114,7 +123,7 @@ func clearChannelReadOnlyFields(channel *PatchChannel, requestData map[string]an
 // channelNonSensitiveFields lists routing / server-managed channel
 // fields a ChannelWrite admin may edit without ChannelSensitiveWrite. When a new
 // field is added to model.Channel it must be added to either this set or
-// channelSensitiveFields or channelOperationalFields; otherwise it falls through
+// channelSensitiveFields, channelOperationalFields, or channelDedicatedFields; otherwise it falls through
 // to the fail-closed branch and is treated as sensitive. The
 // TestChannelFieldsAreClassified guard test enforces this.
 var channelNonSensitiveFields = map[string]struct{}{

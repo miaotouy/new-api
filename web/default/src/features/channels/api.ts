@@ -26,6 +26,9 @@ import type {
   Channel,
   ChannelBalanceResponse,
   ChannelOpsResponse,
+  ChannelTestConfig,
+  ChannelTestConfigResponse,
+  ChannelTestRequestPayload,
   ChannelTestResponse,
   CopyChannelParams,
   CopyChannelResponse,
@@ -212,11 +215,38 @@ export async function batchSetChannelTag(
  */
 export async function testChannel(
   id: number,
-  params?: { model?: string; endpoint_type?: string; stream?: boolean }
+  payload?: ChannelTestRequestPayload
 ): Promise<ChannelTestResponse> {
-  const res = await api.get(
+  if (!payload) {
+    const res = await api.get(`/api/channel/test/${id}`, channelActionConfig())
+    return res.data
+  }
+  const res = await api.post(
     `/api/channel/test/${id}`,
-    channelActionConfig({ params })
+    payload,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function getChannelTestConfig(
+  id: number
+): Promise<ChannelTestConfigResponse> {
+  const res = await api.get(
+    `/api/channel/test/${id}/config`,
+    channelActionConfig()
+  )
+  return res.data
+}
+
+export async function updateChannelTestConfig(
+  id: number,
+  config: ChannelTestConfig
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.put(
+    `/api/channel/test/${id}/config`,
+    config,
+    channelActionConfig()
   )
   return res.data
 }
