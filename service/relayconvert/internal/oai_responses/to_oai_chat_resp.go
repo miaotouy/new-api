@@ -10,29 +10,31 @@ import (
 )
 
 const (
-	responsesEventCreated                  = "response.created"
-	responsesEventCompleted                = "response.completed"
-	responsesEventDone                     = "response.done"
-	responsesEventIncomplete               = "response.incomplete"
-	responsesEventFailed                   = "response.failed"
-	responsesEventError                    = "response.error"
-	responsesEventOutputTextDelta          = "response.output_text.delta"
-	responsesEventOutputItemAdded          = "response.output_item.added"
-	responsesEventOutputItemDone           = "response.output_item.done"
-	responsesEventFunctionArgsDelta        = "response.function_call_arguments.delta"
-	responsesEventFunctionArgsDone         = "response.function_call_arguments.done"
-	responsesEventCustomToolInputDelta     = "response.custom_tool_call_input.delta"
-	responsesEventCustomToolInputDone      = "response.custom_tool_call_input.done"
-	responsesEventReasoningSummaryDelta    = "response.reasoning_summary_text.delta"
-	responsesEventReasoningSummaryDone     = "response.reasoning_summary_text.done"
-	responsesEventReasoningTextDelta       = "response.reasoning_text.delta"
-	responsesEventReasoningTextDone        = "response.reasoning_text.done"
-	responsesOutputTypeFunctionCall        = "function_call"
-	responsesOutputTypeCustomToolCall      = "custom_tool_call"
-	responsesOutputTypeMessage             = "message"
-	responsesOutputTypeReasoning           = "reasoning"
-	responsesIncompleteReasonContentFilter = "content_filter"
-	responsesIncompleteReasonMaxTokens     = "max_output_tokens"
+	responsesEventCreated                   = "response.created"
+	responsesEventCompleted                 = "response.completed"
+	responsesEventDone                      = "response.done"
+	responsesEventIncomplete                = "response.incomplete"
+	responsesEventFailed                    = "response.failed"
+	responsesEventError                     = "response.error"
+	responsesEventOutputTextDelta           = "response.output_text.delta"
+	responsesEventOutputItemAdded           = "response.output_item.added"
+	responsesEventOutputItemDone            = "response.output_item.done"
+	responsesEventFunctionArgsDelta         = "response.function_call_arguments.delta"
+	responsesEventFunctionArgsDone          = "response.function_call_arguments.done"
+	responsesEventCustomToolInputDelta      = "response.custom_tool_call_input.delta"
+	responsesEventCustomToolInputDone       = "response.custom_tool_call_input.done"
+	responsesEventReasoningSummaryPartAdded = "response.reasoning_summary_part.added"
+	responsesEventReasoningSummaryPartDone  = "response.reasoning_summary_part.done"
+	responsesEventReasoningSummaryDelta     = "response.reasoning_summary_text.delta"
+	responsesEventReasoningSummaryDone      = "response.reasoning_summary_text.done"
+	responsesEventReasoningTextDelta        = "response.reasoning_text.delta"
+	responsesEventReasoningTextDone         = "response.reasoning_text.done"
+	responsesOutputTypeFunctionCall         = "function_call"
+	responsesOutputTypeCustomToolCall       = "custom_tool_call"
+	responsesOutputTypeMessage              = "message"
+	responsesOutputTypeReasoning            = "reasoning"
+	responsesIncompleteReasonContentFilter  = "content_filter"
+	responsesIncompleteReasonMaxTokens      = "max_output_tokens"
 )
 
 func ResponsesFinishReasonFromStatus(resp *dto.OpenAIResponsesResponse) (string, bool) {
@@ -219,10 +221,26 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 		if out.Type != responsesOutputTypeReasoning {
 			continue
 		}
-		for _, c := range out.Content {
-			if c.Text != "" {
-				sb.WriteString(c.Text)
+		if len(out.Summary) > 0 {
+			for _, summary := range out.Summary {
+				if summary.Text == "" {
+					continue
+				}
+				if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n\n") && !strings.HasPrefix(summary.Text, "\n\n") {
+					sb.WriteString("\n\n")
+				}
+				sb.WriteString(summary.Text)
 			}
+			continue
+		}
+		for _, c := range out.Content {
+			if c.Text == "" {
+				continue
+			}
+			if sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n\n") && !strings.HasPrefix(c.Text, "\n\n") {
+				sb.WriteString("\n\n")
+			}
+			sb.WriteString(c.Text)
 		}
 	}
 	return sb.String()

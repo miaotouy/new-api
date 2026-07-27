@@ -1,8 +1,10 @@
 package oairesponses
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,6 +79,27 @@ func TestResponsesResponseToChatCompletionsPreservesReasoningSummary(t *testing.
 	assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
 }
 
+func TestResponsesResponseToChatCompletionsPreservesReasoningSummaryParts(t *testing.T) {
+	var resp dto.OpenAIResponsesResponse
+	err := common.UnmarshalJsonStr(`{
+		"id": "resp_1",
+		"model": "gpt-test",
+		"status": "completed",
+		"output": [{
+			"type": "reasoning",
+			"summary": [
+				{"type": "summary_text", "text": "first summary"},
+				{"type": "summary_text", "text": "second summary"}
+			]
+		}]
+	}`, &resp)
+	require.NoError(t, err)
+
+	chat, _, err := ResponsesResponseToChatCompletionsResponse(&resp, "chatcmpl_1")
+	require.NoError(t, err)
+	assert.Equal(t, "first summary\n\nsecond summary", chat.Choices[0].Message.GetReasoningContent())
+}
+
 func TestResponsesFinishReasonFromIncompleteStatus(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -98,6 +121,35 @@ func TestResponsesFinishReasonFromIncompleteStatus(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestResponsesStreamEventToChatChunksSeparatesReasoningSummaryParts(t *testing.T) {
+	state := newTestResponsesStreamState()
+	outputIndex := 0
+	firstSummaryIndex := 0
+	secondSummaryIndex := 1
+
+	events := []*dto.ResponsesStreamResponse{
+		{Type: responsesEventReasoningSummaryPartAdded, OutputIndex: &outputIndex, SummaryIndex: &firstSummaryIndex},
+		{Type: responsesEventReasoningSummaryDelta, OutputIndex: &outputIndex, SummaryIndex: &firstSummaryIndex, Delta: "first summary"},
+		{Type: responsesEventReasoningSummaryDone, OutputIndex: &outputIndex, SummaryIndex: &firstSummaryIndex},
+		{Type: responsesEventReasoningSummaryPartDone, OutputIndex: &outputIndex, SummaryIndex: &firstSummaryIndex},
+		{Type: responsesEventReasoningSummaryPartAdded, OutputIndex: &outputIndex, SummaryIndex: &secondSummaryIndex},
+		{Type: responsesEventReasoningSummaryDelta, OutputIndex: &outputIndex, SummaryIndex: &secondSummaryIndex, Delta: "second summary"},
+	}
+
+	var reasoning strings.Builder
+	for _, event := range events {
+		for _, chunk := range mustStreamChunks(t, state, event) {
+			for _, choice := range chunk.Choices {
+				if choice.Delta.ReasoningContent != nil {
+					reasoning.WriteString(*choice.Delta.ReasoningContent)
+				}
+			}
+		}
+	}
+
+	assert.Equal(t, "first summary\n\nsecond summary", reasoning.String())
 }
 
 func TestResponsesStreamEventToChatChunksUsesOutputIndexForToolArguments(t *testing.T) {
@@ -395,6 +447,32 @@ func TestResponsesBufferedAccumulatorSupplementsEmptyTerminalOutput(t *testing.T
 	toolCalls := chat.Choices[0].Message.ParseToolCalls()
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, `{"q":"x"}`, toolCalls[0].Function.Arguments)
+}
+
+func TestResponsesBufferedAccumulatorSeparatesReasoningSummaryParts(t *testing.T) {
+	acc := NewResponsesBufferedAccumulator()
+	outputIndex := 0
+	firstSummaryIndex := 0
+	secondSummaryIndex := 1
+	acc.ProcessEvent(&dto.ResponsesStreamResponse{
+		Type:         responsesEventReasoningSummaryDelta,
+		OutputIndex:  &outputIndex,
+		SummaryIndex: &firstSummaryIndex,
+		Delta:        "first summary",
+	})
+	acc.ProcessEvent(&dto.ResponsesStreamResponse{
+		Type:         responsesEventReasoningSummaryDelta,
+		OutputIndex:  &outputIndex,
+		SummaryIndex: &secondSummaryIndex,
+		Delta:        "second summary",
+	})
+
+	resp := &dto.OpenAIResponsesResponse{Status: []byte(`"completed"`), Model: "gpt-test"}
+	acc.SupplementResponseOutput(resp)
+
+	chat, _, err := ResponsesResponseToChatCompletionsResponse(resp, "chatcmpl_1")
+	require.NoError(t, err)
+	assert.Equal(t, "first summary\n\nsecond summary", chat.Choices[0].Message.GetReasoningContent())
 }
 
 func TestResponsesBufferedAccumulatorDoesNotDuplicatePendingArgsWithOutputIndexAndItemID(t *testing.T) {

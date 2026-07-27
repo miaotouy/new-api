@@ -24,6 +24,7 @@ type ResponsesToChatStreamState struct {
 	sawToolCall                bool
 	hasSentReasoning           bool
 	needsReasoningSummaryBreak bool
+	lastReasoningSummaryKey    string
 	nextToolIndex              int
 	toolByKey                  map[string]*responsesStreamTool
 	outputIndexToKey           map[int]string
@@ -77,9 +78,15 @@ func ResponsesStreamEventToChatChunks(event *dto.ResponsesStreamResponse, state 
 	case responsesEventCreated:
 		state.applyResponseMetadata(event.Response)
 		return state.ensureStart(), nil
-	case responsesEventReasoningSummaryDelta, responsesEventReasoningTextDelta:
+	case responsesEventReasoningSummaryPartAdded:
+		state.beginReasoningSummary(event)
+		return nil, nil
+	case responsesEventReasoningSummaryDelta:
+		state.beginReasoningSummary(event)
 		return state.reasoningDelta(event.Delta), nil
-	case responsesEventReasoningSummaryDone, responsesEventReasoningTextDone:
+	case responsesEventReasoningTextDelta:
+		return state.reasoningDelta(event.Delta), nil
+	case responsesEventReasoningSummaryDone, responsesEventReasoningSummaryPartDone, responsesEventReasoningTextDone:
 		if state.hasSentReasoning {
 			state.needsReasoningSummaryBreak = true
 		}
@@ -178,6 +185,18 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 			}
 			chunks = append(chunks, s.textDelta(text.String())...)
 		case out.Type == responsesOutputTypeReasoning && !s.hasSentReasoning:
+			if len(out.Summary) > 0 {
+				for _, summary := range out.Summary {
+					if summary.Text == "" {
+						continue
+					}
+					if s.hasSentReasoning {
+						s.needsReasoningSummaryBreak = true
+					}
+					chunks = append(chunks, s.reasoningDelta(summary.Text)...)
+				}
+				continue
+			}
 			var reasoning strings.Builder
 			for _, c := range out.Content {
 				if c.Text != "" {
@@ -190,6 +209,18 @@ func (s *ResponsesToChatStreamState) terminalOutputChunks(response *dto.OpenAIRe
 		}
 	}
 	return chunks
+}
+
+func (s *ResponsesToChatStreamState) beginReasoningSummary(event *dto.ResponsesStreamResponse) {
+	if s == nil || event == nil || event.OutputIndex == nil || event.SummaryIndex == nil {
+		return
+	}
+
+	key := fmt.Sprintf("output:%d:summary:%d", *event.OutputIndex, *event.SummaryIndex)
+	if s.lastReasoningSummaryKey != "" && s.lastReasoningSummaryKey != key && s.hasSentReasoning {
+		s.needsReasoningSummaryBreak = true
+	}
+	s.lastReasoningSummaryKey = key
 }
 
 func (s *ResponsesToChatStreamState) reasoningDelta(delta string) []dto.ChatCompletionsStreamResponse {
@@ -554,13 +585,14 @@ func (s *ResponsesToChatStreamState) keyForEvent(event *dto.ResponsesStreamRespo
 }
 
 type ResponsesBufferedAccumulator struct {
-	text                 strings.Builder
-	reasoning            strings.Builder
-	tools                []*responsesBufferedTool
-	outputIndexToToolIdx map[int]int
-	itemIDToToolIdx      map[string]int
-	pendingByOutputIndex map[int]string
-	pendingByItemID      map[string]string
+	text                    strings.Builder
+	reasoning               strings.Builder
+	lastReasoningSummaryKey string
+	tools                   []*responsesBufferedTool
+	outputIndexToToolIdx    map[int]int
+	itemIDToToolIdx         map[string]int
+	pendingByOutputIndex    map[int]string
+	pendingByItemID         map[string]string
 }
 
 type responsesBufferedTool struct {
@@ -586,7 +618,9 @@ func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamRe
 	switch event.Type {
 	case responsesEventOutputTextDelta:
 		a.text.WriteString(event.Delta)
-	case responsesEventReasoningSummaryDelta, responsesEventReasoningTextDelta:
+	case responsesEventReasoningSummaryDelta:
+		a.appendReasoningSummaryDelta(event)
+	case responsesEventReasoningTextDelta:
 		a.reasoning.WriteString(event.Delta)
 	case responsesEventOutputItemAdded, responsesEventOutputItemDone:
 		if event.Item != nil && isResponsesToolOutputType(event.Item.Type) {
@@ -609,6 +643,25 @@ func (a *ResponsesBufferedAccumulator) ProcessEvent(event *dto.ResponsesStreamRe
 	}
 }
 
+func (a *ResponsesBufferedAccumulator) appendReasoningSummaryDelta(event *dto.ResponsesStreamResponse) {
+	if a == nil || event == nil || event.Delta == "" {
+		return
+	}
+
+	key := ""
+	if event.OutputIndex != nil && event.SummaryIndex != nil {
+		key = fmt.Sprintf("output:%d:summary:%d", *event.OutputIndex, *event.SummaryIndex)
+	}
+	if key != "" && a.lastReasoningSummaryKey != "" && a.lastReasoningSummaryKey != key && a.reasoning.Len() > 0 &&
+		!strings.HasSuffix(a.reasoning.String(), "\n\n") && !strings.HasPrefix(event.Delta, "\n\n") {
+		a.reasoning.WriteString("\n\n")
+	}
+	if key != "" {
+		a.lastReasoningSummaryKey = key
+	}
+	a.reasoning.WriteString(event.Delta)
+}
+
 func (a *ResponsesBufferedAccumulator) SupplementResponseOutput(resp *dto.OpenAIResponsesResponse) {
 	if a == nil || resp == nil || len(resp.Output) > 0 {
 		return
@@ -624,7 +677,7 @@ func (a *ResponsesBufferedAccumulator) BuildOutput() []dto.ResponsesOutput {
 	if a.reasoning.Len() > 0 {
 		out = append(out, dto.ResponsesOutput{
 			Type: responsesOutputTypeReasoning,
-			Content: []dto.ResponsesOutputContent{
+			Summary: []dto.ResponsesReasoningSummaryPart{
 				{Type: "summary_text", Text: a.reasoning.String()},
 			},
 		})
