@@ -3,7 +3,6 @@ package oauth
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -84,7 +83,7 @@ func (p *MisskeyProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	}
 
 	var checkRes misskeyTokenCheckResponse
-	if err := json.Unmarshal(respBody, &checkRes); err != nil {
+	if err := common.Unmarshal(respBody, &checkRes); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] ExchangeToken decode error: %s", err.Error()))
 		return nil, err
 	}
@@ -108,7 +107,7 @@ func (p *MisskeyProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 
 	// Call /api/i with the token
 	bodyData := map[string]string{"i": token.AccessToken}
-	jsonBody, err := json.Marshal(bodyData)
+	jsonBody, err := common.Marshal(bodyData)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +141,7 @@ func (p *MisskeyProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 	}
 
 	var userInfo misskeyUserInfo
-	if err := json.Unmarshal(respBody, &userInfo); err != nil {
+	if err := common.Unmarshal(respBody, &userInfo); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] GetUserInfo decode error: %s", err.Error()))
 		return nil, err
 	}

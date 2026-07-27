@@ -481,27 +481,21 @@ type SessionTestContentOverride =
 - `controller/channel_authz.go`：新渠道字段权限分类；
 - 渠道复制、导入导出和迁移相关代码。
 
-Default 前端：
+前端：
 
-- `web/default/src/features/channels/api.ts`：测试配置和 POST 测试 API；
-- `web/default/src/features/channels/types.ts`：端点配置类型；
-- `web/default/src/features/channels/lib/channel-actions.ts`：传递临时覆盖；
-- `web/default/src/features/channels/components/dialogs/channel-test-dialog.tsx`：设置入口和会话状态；
+- `web/src/features/channels/api.ts`：测试配置和 POST 测试 API；
+- `web/src/features/channels/types.ts`：端点配置类型；
+- `web/src/features/channels/lib/channel-actions.ts`：传递临时覆盖；
+- `web/src/features/channels/components/dialogs/channel-test-dialog.tsx`：设置入口和会话状态；
 - 新增独立的测试内容 Sheet 组件，避免继续扩大主弹窗组件；
-- `web/default/src/i18n/locales/`：新增文案翻译。
-
-Classic 前端：
-
-- `web/classic/src/hooks/channels/useChannelsData.jsx`；
-- `web/classic/src/components/table/channels/modals/ModelTestModal.jsx`；
-- Classic 对应的 locale 文件。
+- `web/src/i18n/locales/`：新增文案翻译。
 
 ## 14. 验证命令
 
 ```powershell
 go test ./controller ./model ./router
 
-cd E:\git\new-api\web\default
+cd E:\git\new-api\web
 bun run typecheck
 bun run lint
 bun run i18n:sync

@@ -9,7 +9,7 @@
 # runtime command differs, so the existing makefile and Docker setup remain
 # unchanged.
 
-WEB_DIR = ./web/default
+WEB_DIR = ./web
 DEV_COMPOSE_FILE ?= docker-compose.dev.yml
 DEV_WEB_DEFAULT_PORT ?= 3001
 PODMAN ?= podman

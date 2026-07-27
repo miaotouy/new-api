@@ -200,7 +200,7 @@ max_ratio
 
 ## 7. 管理端界面
 
-扩展 `web/default/src/features/keys`：
+扩展 `web/src/features/keys`：
 
 - 新增自动/手动路由模式；
 - 自动模式下选择“现有优先级”或“价格优先”；
