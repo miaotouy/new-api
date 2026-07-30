@@ -21,6 +21,15 @@ func buildMaskedTokenResponse(token *model.Token) *model.Token {
 	}
 	maskedToken := *token
 	maskedToken.Key = token.GetMaskedKey()
+	if maskedToken.RouteMode == "" {
+		maskedToken.RouteMode = "auto"
+	}
+	if maskedToken.AutoRouteStrategy == "" {
+		maskedToken.AutoRouteStrategy = "priority"
+	}
+	if maskedToken.RateLimitWindow == 0 {
+		maskedToken.RateLimitWindow = 60
+	}
 	return &maskedToken
 }
 

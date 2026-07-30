@@ -45,11 +45,14 @@ export const apiKeySchema = z.object({
   model_limits_enabled: z.boolean(),
   model_limits: z.string().nullish().default(''),
   allow_ips: z.string().nullish().default(''),
-  route_mode: z.enum(['auto', 'manual']).optional().default('auto'),
-  auto_route_strategy: z
-    .enum(['priority', 'price'])
-    .optional()
-    .default('priority'),
+  route_mode: z.preprocess(
+    (value) => (value === '' || value == null ? undefined : value),
+    z.enum(['auto', 'manual']).optional().default('auto')
+  ),
+  auto_route_strategy: z.preprocess(
+    (value) => (value === '' || value == null ? undefined : value),
+    z.enum(['priority', 'price']).optional().default('priority')
+  ),
   max_ratio: z.number().optional().default(0),
   failover_enabled: z.boolean().optional().default(false),
   rate_limit: z.number().optional().default(0),

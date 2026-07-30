@@ -29,3 +29,17 @@ func TestValidateTokenRoutingSettingsRejectsUnsafeValues(t *testing.T) {
 		require.Error(t, validateTokenRoutingSettings(&token))
 	}
 }
+
+func TestBuildMaskedTokenResponseNormalizesLegacyRoutingDefaults(t *testing.T) {
+	token := &model.Token{Key: "legacy-token-key"}
+
+	response := buildMaskedTokenResponse(token)
+
+	require.Equal(t, token.GetMaskedKey(), response.Key)
+	require.Equal(t, "auto", response.RouteMode)
+	require.Equal(t, "priority", response.AutoRouteStrategy)
+	require.Equal(t, 60, response.RateLimitWindow)
+	require.Empty(t, token.RouteMode)
+	require.Empty(t, token.AutoRouteStrategy)
+	require.Zero(t, token.RateLimitWindow)
+}
