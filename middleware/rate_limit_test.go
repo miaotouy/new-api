@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
@@ -91,6 +92,38 @@ func TestRedisUserRateLimiterUsesSharedFixedWindow(t *testing.T) {
 	key := redisUserRateLimitKey("USER", 42)
 	assert.True(t, redisServer.Exists(key))
 	assert.Equal(t, 23*time.Second, redisServer.TTL(key))
+}
+
+func TestRedisTokenRateLimiterUsesSharedFixedWindowAndV2Namespace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	redisServer, _ := useRateLimitMiniRedis(t)
+
+	router := gin.New()
+	router.GET(
+		"/limited",
+		func(c *gin.Context) {
+			common.SetContextKey(c, constant.ContextKeyTokenId, 42)
+			common.SetContextKey(c, constant.ContextKeyTokenRateLimit, 1)
+			common.SetContextKey(c, constant.ContextKeyTokenRateLimitWindow, 19)
+		},
+		TokenRateLimit(),
+		func(c *gin.Context) { c.Status(http.StatusNoContent) },
+	)
+
+	legacyKey := "rateLimit:token:42"
+	_, err := redisServer.Push(legacyKey, "legacy-list-entry")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/limited", "192.0.2.70:12345").Code)
+	limitedResponse := performRateLimitRequest(router, "/limited", "192.0.2.70:12345")
+	assert.Equal(t, http.StatusTooManyRequests, limitedResponse.Code)
+	assert.Equal(t, "19", limitedResponse.Header().Get("Retry-After"))
+
+	key := redisTokenRateLimitKey(42)
+	count, err := redisServer.Get(key)
+	require.NoError(t, err)
+	assert.Equal(t, "2", count)
+	assert.Equal(t, 19*time.Second, redisServer.TTL(key))
+	assert.True(t, redisServer.Exists(legacyKey), "the v2 token counter must not touch the legacy list key")
 }
 
 func TestRedisEmailVerificationRateLimiterPreservesResponseAndTTL(t *testing.T) {
@@ -214,6 +247,16 @@ func TestRedisFailurePolicies(t *testing.T) {
 	router.GET("/email", EmailVerificationRateLimit(), func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
+	router.GET(
+		"/token",
+		func(c *gin.Context) {
+			common.SetContextKey(c, constant.ContextKeyTokenId, 99)
+			common.SetContextKey(c, constant.ContextKeyTokenRateLimit, 1)
+			common.SetContextKey(c, constant.ContextKeyTokenRateLimitWindow, 17)
+		},
+		TokenRateLimit(),
+		func(c *gin.Context) { c.Status(http.StatusNoContent) },
+	)
 
 	ipResponse := performRateLimitRequest(router, "/ip", "192.0.2.60:12345")
 	assert.Equal(t, http.StatusInternalServerError, ipResponse.Code)
@@ -222,4 +265,8 @@ func TestRedisFailurePolicies(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, userResponse.Code)
 	assert.Empty(t, userResponse.Body.String())
 	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/email", "192.0.2.62:12345").Code)
+	assert.Equal(t, http.StatusNoContent, performRateLimitRequest(router, "/token", "192.0.2.63:12345").Code)
+	tokenLimitedResponse := performRateLimitRequest(router, "/token", "192.0.2.63:12345")
+	assert.Equal(t, http.StatusTooManyRequests, tokenLimitedResponse.Code)
+	assert.Equal(t, "17", tokenLimitedResponse.Header().Get("Retry-After"))
 }

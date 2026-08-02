@@ -21,17 +21,15 @@ type RouteCandidate struct {
 	Weight        uint
 	ResponseTime  int
 	GroupRatio    float64
-	EstimatedCost float64
 	scopePosition int
 }
 
 type RouteAttempt struct {
-	RouteMode          string  `json:"route_mode"`
-	CandidateGroup     string  `json:"candidate_group"`
-	CandidateChannelID int     `json:"candidate_channel_id"`
-	FallbackReason     string  `json:"fallback_reason,omitempty"`
-	AttemptIndex       int     `json:"attempt_index"`
-	MaxRatio           float64 `json:"max_ratio"`
+	RouteMode          string `json:"route_mode"`
+	CandidateGroup     string `json:"candidate_group"`
+	CandidateChannelID int    `json:"candidate_channel_id"`
+	FallbackReason     string `json:"fallback_reason,omitempty"`
+	AttemptIndex       int    `json:"attempt_index"`
 }
 
 type RoutePlan struct {
@@ -159,7 +157,7 @@ func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPat
 			if err != nil {
 				return plan, err
 			}
-			appendRouteChannels(plan, seen, rule.GroupName, channels, userGroup, modelName, rule.Position)
+			appendRouteChannels(plan, seen, rule.GroupName, channels, userGroup, rule.Position)
 			continue
 		}
 		if rule.Kind != model.TokenRouteKindChannel || rule.ChannelID <= 0 || !routeGroupAllowed(userGroup, rule.GroupName, plan.MaxRatio) {
@@ -171,7 +169,7 @@ func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPat
 		}
 		for _, channel := range channels {
 			if channel.Id == rule.ChannelID {
-				appendRouteCandidate(plan, seen, rule.GroupName, channel, userGroup, modelName, rule.Position)
+				appendRouteCandidate(plan, seen, rule.GroupName, channel, userGroup, rule.Position)
 				break
 			}
 		}
@@ -195,7 +193,7 @@ func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelN
 		if err != nil {
 			return plan, err
 		}
-		appendRouteChannels(plan, seenChannels, group, channels, userGroup, modelName, index)
+		appendRouteChannels(plan, seenChannels, group, channels, userGroup, index)
 		if !plan.FailoverEnabled && len(plan.Candidates) > 0 {
 			break
 		}
@@ -212,8 +210,8 @@ func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelN
 func sortRouteCandidatesByPrice(candidates []RouteCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		left, right := candidates[i], candidates[j]
-		if left.EstimatedCost != right.EstimatedCost {
-			return left.EstimatedCost < right.EstimatedCost
+		if left.GroupRatio != right.GroupRatio {
+			return left.GroupRatio < right.GroupRatio
 		}
 		if left.Priority != right.Priority {
 			return left.Priority > right.Priority
@@ -313,7 +311,6 @@ func consumeRouteCandidate(plan *RoutePlan, candidate RouteCandidate, fallbackRe
 		CandidateChannelID: candidate.ChannelID,
 		FallbackReason:     fallbackReason,
 		AttemptIndex:       len(plan.Attempts),
-		MaxRatio:           plan.MaxRatio,
 	})
 }
 
@@ -361,30 +358,6 @@ func RecordTokenRouteFallback(c *gin.Context, err *types.NewAPIError) {
 	last.FallbackReason = "network_error"
 }
 
-func GetTokenRouteCandidateGroups(c *gin.Context) []string {
-	if c == nil {
-		return nil
-	}
-	value, ok := common.GetContextKey(c, constant.ContextKeyTokenRoutePlan)
-	if !ok {
-		return nil
-	}
-	plan, ok := value.(*RoutePlan)
-	if !ok || plan == nil {
-		return nil
-	}
-	groups := make([]string, 0, len(plan.Candidates))
-	seen := make(map[string]struct{}, len(plan.Candidates))
-	for _, candidate := range plan.Candidates {
-		if _, exists := seen[candidate.Group]; exists {
-			continue
-		}
-		seen[candidate.Group] = struct{}{}
-		groups = append(groups, candidate.Group)
-	}
-	return groups
-}
-
 func AppendTokenRouteAdminInfo(c *gin.Context, adminInfo map[string]interface{}) {
 	if c == nil || adminInfo == nil || !ShouldUseTokenRouting(c) {
 		return
@@ -421,22 +394,33 @@ func routeGroups(userGroup, tokenGroup string, failover bool) []string {
 	}
 	seen := map[string]struct{}{tokenGroup: {}}
 	for _, group := range GetUserAutoGroup(userGroup) {
-		if _, ok := seen[group]; !ok {
-			seen[group] = struct{}{}
-			groups = append(groups, group)
-		}
-	}
-	for group := range GetUserUsableGroups(userGroup) {
-		if group == "auto" {
+		if _, ok := seen[group]; ok {
 			continue
 		}
-		if _, ok := seen[group]; !ok && ratio_setting.ContainsGroupRatio(group) {
-			seen[group] = struct{}{}
-			groups = append(groups, group)
-		}
+		seen[group] = struct{}{}
+		groups = append(groups, group)
 	}
-	sort.Strings(groups[1:])
-	return groups
+
+	remainingGroups := make([]string, 0)
+	for group := range GetUserUsableGroups(userGroup) {
+		if group == "auto" || !ratio_setting.ContainsGroupRatio(group) {
+			continue
+		}
+		if _, ok := seen[group]; ok {
+			continue
+		}
+		seen[group] = struct{}{}
+		remainingGroups = append(remainingGroups, group)
+	}
+	sort.Slice(remainingGroups, func(i, j int) bool {
+		leftRatio := GetUserGroupRatio(userGroup, remainingGroups[i])
+		rightRatio := GetUserGroupRatio(userGroup, remainingGroups[j])
+		if leftRatio != rightRatio {
+			return leftRatio < rightRatio
+		}
+		return remainingGroups[i] < remainingGroups[j]
+	})
+	return append(groups, remainingGroups...)
 }
 
 func routeGroupAllowed(userGroup, group string, maxRatio float64) bool {
@@ -447,13 +431,13 @@ func routeGroupAllowed(userGroup, group string, maxRatio float64) bool {
 	return maxRatio <= 0 || ratio <= maxRatio
 }
 
-func appendRouteChannels(plan *RoutePlan, seen map[int]struct{}, group string, channels []*model.Channel, userGroup, modelName string, scopePosition int) {
+func appendRouteChannels(plan *RoutePlan, seen map[int]struct{}, group string, channels []*model.Channel, userGroup string, scopePosition int) {
 	for _, channel := range channels {
-		appendRouteCandidate(plan, seen, group, channel, userGroup, modelName, scopePosition)
+		appendRouteCandidate(plan, seen, group, channel, userGroup, scopePosition)
 	}
 }
 
-func appendRouteCandidate(plan *RoutePlan, seen map[int]struct{}, group string, channel *model.Channel, userGroup, modelName string, scopePosition int) {
+func appendRouteCandidate(plan *RoutePlan, seen map[int]struct{}, group string, channel *model.Channel, userGroup string, scopePosition int) {
 	if channel == nil {
 		return
 	}
@@ -461,21 +445,13 @@ func appendRouteCandidate(plan *RoutePlan, seen map[int]struct{}, group string, 
 		return
 	}
 	seen[channel.Id] = struct{}{}
-	ratio := GetUserGroupRatio(userGroup, group)
-	modelCost := 1.0
-	if modelPrice, usePrice := ratio_setting.GetModelPrice(modelName, false); usePrice {
-		modelCost = modelPrice
-	} else if modelRatio, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
-		modelCost = modelRatio
-	}
 	plan.Candidates = append(plan.Candidates, RouteCandidate{
 		Group:         group,
 		ChannelID:     channel.Id,
 		Priority:      channel.GetPriority(),
 		Weight:        uint(channel.GetWeight()),
 		ResponseTime:  channel.ResponseTime,
-		GroupRatio:    ratio,
-		EstimatedCost: modelCost * ratio,
+		GroupRatio:    GetUserGroupRatio(userGroup, group),
 		scopePosition: scopePosition,
 	})
 }

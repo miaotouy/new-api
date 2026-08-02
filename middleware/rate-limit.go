@@ -50,6 +50,10 @@ func redisUserRateLimitKey(mark string, userID int) string {
 	return fmt.Sprintf("%s:user:%s:%d", redisRateLimitNamespace, mark, userID)
 }
 
+func redisTokenRateLimitKey(tokenID int) string {
+	return fmt.Sprintf("%s:token:%d", redisRateLimitNamespace, tokenID)
+}
+
 func redisReplyInteger(value interface{}) (int64, error) {
 	switch typed := value.(type) {
 	case int64:
@@ -262,41 +266,20 @@ func TokenRateLimit() func(c *gin.Context) {
 			c.Abort()
 			return
 		}
-		key := fmt.Sprintf("rateLimit:token:%d", tokenID)
+		key := redisTokenRateLimitKey(tokenID)
 		if common.RedisEnabled {
-			allowed, healthy := tokenRedisRateLimiter(key, maxRequests, int64(window))
-			if healthy {
+			allowed, _, ttlSeconds, err := redisFixedWindowTake(c.Request.Context(), key, maxRequests, int64(window))
+			if err == nil {
 				if !allowed {
-					c.Status(http.StatusTooManyRequests)
-					c.Abort()
+					writeRateLimited(c, ttlSeconds)
 				}
 				return
 			}
+			logger.LogError(c.Request.Context(), fmt.Sprintf("token rate limit Redis check failed (token_id=%d): %v", tokenID, err))
 		}
 		inMemoryRateLimiter.Init(common.RateLimitKeyExpirationDuration)
 		if !inMemoryRateLimiter.Request(key, maxRequests, int64(window)) {
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
+			writeRateLimited(c, int64(window))
 		}
 	}
-}
-
-const tokenRateLimitLua = `
-local requests = redis.call("INCR", KEYS[1])
-if requests == 1 then
-  redis.call("EXPIRE", KEYS[1], ARGV[2])
-end
-if requests > tonumber(ARGV[1]) then
-  return 0
-end
-return 1
-`
-
-func tokenRedisRateLimiter(key string, maxRequests int, duration int64) (allowed bool, healthy bool) {
-	result, err := common.RDB.Eval(context.Background(), tokenRateLimitLua, []string{key}, maxRequests, duration).Int()
-	if err != nil {
-		common.SysLog(fmt.Sprintf("token rate limit redis script failed: %v", err))
-		return false, false
-	}
-	return result == 1, true
 }

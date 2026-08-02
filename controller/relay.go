@@ -157,21 +157,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
 	}
-	preConsumePriceData := priceData
-	if service.ShouldUseTokenRouting(c) {
-		preConsumePriceData, err = maxTokenRoutePreConsumePriceData(c, relayInfo, tokens, meta)
-		if err != nil {
-			newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-			return
-		}
-	}
-
 	// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
-	if preConsumePriceData.FreeModel {
+	if priceData.FreeModel {
 		logger.LogInfo(c, fmt.Sprintf("模型 %s 免费，跳过预扣费", relayInfo.OriginModelName))
 	} else {
-		newAPIError = service.PreConsumeBilling(c, preConsumePriceData.QuotaToPreConsume, relayInfo)
+		newAPIError = service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo)
 		if newAPIError != nil {
 			return
 		}
@@ -206,6 +197,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
+		// Recalculate after every route selection; Reserve tops up before the upstream call,
+		// so the initial pre-consume only needs to cover the first selected group.
 		if routeBillingErr := refreshTokenRouteBilling(c, relayInfo, tokens, meta); routeBillingErr != nil {
 			newAPIError = routeBillingErr
 			break
@@ -261,33 +254,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
-}
-
-func maxTokenRoutePreConsumePriceData(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
-	groups := service.GetTokenRouteCandidateGroups(c)
-	if len(groups) == 0 {
-		return helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
-	}
-
-	selectedGroup := relayInfo.UsingGroup
-	maxQuota := -1
-	var maxPriceData types.PriceData
-	for _, group := range groups {
-		common.SetContextKey(c, constant.ContextKeyAutoGroup, group)
-		priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
-		if err != nil {
-			common.SetContextKey(c, constant.ContextKeyAutoGroup, selectedGroup)
-			relayInfo.UsingGroup = selectedGroup
-			return types.PriceData{}, err
-		}
-		if priceData.QuotaToPreConsume > maxQuota {
-			maxQuota = priceData.QuotaToPreConsume
-			maxPriceData = priceData
-		}
-	}
-	common.SetContextKey(c, constant.ContextKeyAutoGroup, selectedGroup)
-	relayInfo.UsingGroup = selectedGroup
-	return maxPriceData, nil
 }
 
 func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {

@@ -96,7 +96,6 @@ type RouteCandidate struct {
     Priority      int64
     Weight        uint
     GroupRatio    float64
-    EstimatedCost float64
 }
 
 type RoutePlan struct {
@@ -130,14 +129,9 @@ type RoutePlan struct {
 - `priority` 策略保持现有优先级和权重行为；
 - `price` 策略按实际用户组倍率排序，再按 priority、响应时间、weight、channel ID 稳定排序。
 
-当前仓库没有独立的渠道价格字段，因此 v1 的“价格路由”使用：
+当前仓库没有独立的渠道价格字段，且同一次请求的模型固定，因此模型价格或模型倍率对全部候选都是相同常量。v1 直接使用 `service.GetUserGroupRatio(userGroup, candidateGroup)` 作为跨分组排序键，避免混用按次价格与 token 倍率两种量纲。
 
-```text
-实际用户组倍率 = service.GetUserGroupRatio(userGroup, candidateGroup)
-预计成本 = 模型价格或模型倍率 × 实际用户组倍率
-```
-
-同一模型在不同渠道没有独立价格时，渠道之间按优先级、响应时间和权重处理。未来若增加渠道级价格，只需替换候选成本计算器。
+同一分组内的渠道继续按优先级、响应时间和权重处理。未来若增加渠道级价格，应引入量纲统一的候选成本计算器。
 
 ## 4. 重试与故障转移
 
@@ -167,7 +161,6 @@ candidate_group
 candidate_channel_id
 fallback_reason
 attempt_index
-max_ratio
 ```
 
 详细信息放入现有日志 `other.admin_info`，普通用户日志不显示渠道内部信息。
@@ -176,16 +169,17 @@ max_ratio
 
 路由选择必须在首次预扣费前完成，最终选中的分组同步到 `RelayInfo`。
 
-为了避免从低倍率渠道切换到高倍率渠道后出现响应已返回、额度无法补扣的问题：
+为了避免高倍率容灾候选放大首次预扣、导致本可命中低倍率候选的请求被提前拒绝，同时确保切换后不会在响应返回后才发现额度不足：
 
-- 在首次上游调用前，基于当前请求估算和所有合规候选分组计算保守的最大预扣额度；
+- 首次上游调用前，仅按当前选中分组执行预扣；
+- 每次切换候选后、调用上游前，使用 `BillingSession.Reserve` 将预扣补足到新分组所需额度；补足失败时不得调用该候选渠道；
 - 使用现有 `ModelPriceHelper` 的计费规则和 `common.QuotaFromFloatChecked`、`common.QuotaFromDecimalChecked`；
 - 请求成功后按最终实际分组和实际用量结算，多余预扣自动退还；
 - 没有满足 `max_ratio` 的候选时，不进行任何预扣并返回无可用渠道；
 - 所有倍率、窗口、排序权重和候选数量做有限值校验，拒绝 NaN、Inf、负值和超限输入；
 - 涉及 tiered billing 时先遵循 `pkg/billingexpr/expr.md` 的预扣和结算规则。
 
-必须覆盖“低价候选失败、高价候选成功”“预扣额度不足”“全部候选失败”和“结算低于预扣”四类路径。
+必须覆盖“低价候选失败、高价候选成功并补足预扣”“容灾补足额度不足时不调用高价候选”“全部候选失败”和“结算低于预扣”四类路径。
 
 ## 6. Key 级速率限制
 

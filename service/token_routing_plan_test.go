@@ -7,6 +7,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -43,16 +45,47 @@ func TestRouteCandidateDoesNotRepeatConsumedChannel(t *testing.T) {
 	require.Equal(t, 2, candidate.ChannelID)
 }
 
+func TestPriceRouteCandidatesPreferLowerGroupRatio(t *testing.T) {
+	candidates := []RouteCandidate{
+		{ChannelID: 1, GroupRatio: 2, Priority: 100, ResponseTime: 1, Weight: 100},
+		{ChannelID: 2, GroupRatio: 1, Priority: 1, ResponseTime: 100, Weight: 1},
+	}
+
+	sortRouteCandidatesByPrice(candidates)
+
+	require.Equal(t, []int{2, 1}, []int{candidates[0].ChannelID, candidates[1].ChannelID})
+}
+
 func TestPriceRouteCandidatesUseResponseTimeBeforeWeight(t *testing.T) {
 	candidates := []RouteCandidate{
-		{ChannelID: 1, EstimatedCost: 1, Priority: 10, ResponseTime: 50, Weight: 100},
-		{ChannelID: 2, EstimatedCost: 1, Priority: 10, ResponseTime: 10, Weight: 1},
-		{ChannelID: 3, EstimatedCost: 1, Priority: 9, ResponseTime: 1, Weight: 100},
+		{ChannelID: 1, GroupRatio: 1, Priority: 10, ResponseTime: 50, Weight: 100},
+		{ChannelID: 2, GroupRatio: 1, Priority: 10, ResponseTime: 10, Weight: 1},
+		{ChannelID: 3, GroupRatio: 1, Priority: 9, ResponseTime: 1, Weight: 100},
 	}
 
 	sortRouteCandidatesByPrice(candidates)
 
 	require.Equal(t, []int{2, 1, 3}, []int{candidates[0].ChannelID, candidates[1].ChannelID, candidates[2].ChannelID})
+}
+
+func TestRouteGroupsPreserveAutoGroupOrderBeforeRatioSortedFallbacks(t *testing.T) {
+	previousAutoGroups := setting.AutoGroups2JsonString()
+	previousUsableGroups := setting.UserUsableGroups2JSONString()
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateAutoGroupsByJsonString(previousAutoGroups))
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousUsableGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+	})
+
+	require.NoError(t, setting.UpdateAutoGroupsByJsonString(`["vip","default"]`))
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"fixed":"","vip":"","default":"","standard":"","premium":"","alpha":"","beta":""}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"fixed":1,"vip":2,"default":1,"standard":1.5,"premium":1.2,"alpha":1.5,"beta":1.5}`))
+
+	require.Equal(t,
+		[]string{"fixed", "vip", "default", "premium", "alpha", "beta", "standard"},
+		routeGroups("", "fixed", true),
+	)
 }
 
 func TestTokenRouteAttemptIsAuditedWithFallbackReason(t *testing.T) {
