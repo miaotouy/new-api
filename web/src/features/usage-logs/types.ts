@@ -412,3 +412,88 @@ export interface UserInfo {
   aff_quota?: number
   remark?: string
 }
+
+// ============================================================================
+// Log Export Types
+// ============================================================================
+
+export type LogExportFormat = 'csv' | 'json' | 'md'
+export type LogExportScope = 'all' | 'self'
+export type LogExportStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+
+export interface LogExportColumn {
+  key: string
+  label: string
+}
+
+export interface LogExportFilters {
+  type?: number
+  username?: string
+  token_name?: string
+  model_name?: string
+  start_timestamp?: number
+  end_timestamp?: number
+  channel?: number
+  group?: string
+  request_id?: string
+  upstream_request_id?: string
+  channel_id?: string
+  mj_id?: string
+  task_id?: string
+}
+
+export interface LogExportPresentation {
+  locale: string
+  time_zone: string
+  labels: Record<string, string>
+  quota_per_unit?: number
+  currency_symbol?: string
+  currency_rate?: number
+  quota_display_mode?: string
+}
+
+export interface CreateLogExportRequest {
+  category: LogCategory
+  format: LogExportFormat
+  scope: LogExportScope
+  filters: LogExportFilters
+  columns: LogExportColumn[]
+  sensitive_visible: boolean
+  presentation: LogExportPresentation
+}
+
+export interface LogExportTask {
+  id: number
+  task_id: string
+  user_id: number
+  category: LogCategory
+  format: LogExportFormat
+  scope: LogExportScope
+  status: LogExportStatus
+  progress: number
+  processed_rows: number
+  total_rows: number
+  file_name: string
+  content_type: string
+  file_size: number
+  stored_size: number
+  chunk_count: number
+  error: string
+  attempts: number
+  snapshot_at: number
+  created_at: number
+  updated_at: number
+  completed_at: number
+  expires_at: number
+}
+
+export interface LogExportListResponse {
+  success: boolean
+  message?: string
+  data?: {
+    items: LogExportTask[]
+    total: number
+    page: number
+    page_size: number
+  }
+}

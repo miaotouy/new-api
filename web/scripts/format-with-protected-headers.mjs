@@ -17,8 +17,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { spawnSync } from 'node:child_process'
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, relative } from 'node:path'
 
 const mode = process.argv[2]
 
@@ -49,7 +58,7 @@ const headerExtensions = new Set([
   '.tsx',
 ])
 const protectedHeaderPattern =
-  /^\/\*\nCopyright \(C\)[\s\S]*?QuantumNous[\s\S]*?\*\/\n+/
+  /^\/\*\r?\nCopyright \(C\)[\s\S]*?QuantumNous[\s\S]*?\*\/(?:\r?\n)+/
 
 function extensionOf(path) {
   const index = path.lastIndexOf('.')
@@ -81,10 +90,20 @@ function snapshotFiles(files) {
   return snapshot
 }
 
-function restoreSnapshot(snapshot) {
-  for (const [file, content] of snapshot) {
-    writeFileSync(file, content)
+function writeFileWithRetry(file, content) {
+  let lastError
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      writeFileSync(file, content)
+      return
+    } catch (error) {
+      lastError = error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100)
+    }
   }
+
+  throw lastError
 }
 
 function stripProtectedHeaders(files) {
@@ -102,7 +121,7 @@ function stripProtectedHeaders(files) {
     }
 
     headers.set(file, match[0])
-    writeFileSync(file, content.slice(match[0].length))
+    writeFileWithRetry(file, content.slice(match[0].length))
   }
 
   return headers
@@ -112,17 +131,44 @@ function restoreProtectedHeaders(headers) {
   for (const [file, header] of headers) {
     const content = readFileSync(file, 'utf8').replace(/^\n+/, '')
     if (!content.startsWith(header)) {
-      writeFileSync(file, header + content)
+      writeFileWithRetry(file, header + content)
     }
   }
 }
 
-function listChangedFiles(before, files) {
+function prepareCheckWorkspace(files, checkRoot) {
+  const headers = new Map()
+
+  for (const file of files) {
+    const target = join(checkRoot, relative(root, file))
+    mkdirSync(dirname(target), { recursive: true })
+    let content = readFileSync(file)
+
+    if (headerExtensions.has(extensionOf(file))) {
+      const text = content.toString('utf8')
+      const match = text.match(protectedHeaderPattern)
+      if (match) {
+        headers.set(file, match[0])
+        content = Buffer.from(text.slice(match[0].length))
+      }
+    }
+
+    writeFileSync(target, content)
+  }
+
+  return headers
+}
+
+function listChangedFiles(before, files, headers, checkRoot) {
   const changed = []
 
   for (const file of files) {
     const previous = before.get(file)
-    const current = readFileSync(file)
+    let current = readFileSync(join(checkRoot, relative(root, file)))
+    const header = headers.get(file)
+    if (header) {
+      current = Buffer.concat([Buffer.from(header), current])
+    }
     if (!previous || !previous.equals(current)) {
       changed.push(relative(root, file))
     }
@@ -134,37 +180,51 @@ function listChangedFiles(before, files) {
 const files = walk(root).filter(
   (file) => statSync(file).size < 10 * 1024 * 1024
 )
-const before = mode === '--check' ? snapshotFiles(files) : null
-let headers = new Map()
 let exitCode = 0
 
-try {
-  headers = stripProtectedHeaders(files)
-  const result = spawnSync(
-    'oxfmt',
-    ['-c', '.oxfmtrc.json', '--ignore-path', '.gitignore', '--write', '.'],
-    {
-      cwd: root,
-      stdio: 'inherit',
-    }
-  )
-  exitCode = result.status ?? 1
-  restoreProtectedHeaders(headers)
+if (mode === '--check') {
+  const before = snapshotFiles(files)
+  const checkRoot = mkdtempSync(join(tmpdir(), 'new-api-format-check-'))
 
-  if (mode === '--check' && exitCode === 0) {
-    const changed = listChangedFiles(before, files)
-    if (changed.length > 0) {
-      console.error('Format issues found in protected-header-safe check:')
-      for (const file of changed) {
-        console.error(file)
+  try {
+    const headers = prepareCheckWorkspace(files, checkRoot)
+    const result = spawnSync(
+      'oxfmt',
+      ['-c', '.oxfmtrc.json', '--ignore-path', '.gitignore', '--write', '.'],
+      {
+        cwd: checkRoot,
+        stdio: 'inherit',
       }
-      exitCode = 1
+    )
+    exitCode = result.status ?? 1
+
+    if (exitCode === 0) {
+      const changed = listChangedFiles(before, files, headers, checkRoot)
+      if (changed.length > 0) {
+        console.error('Format issues found in protected-header-safe check:')
+        for (const file of changed) {
+          console.error(file)
+        }
+        exitCode = 1
+      }
     }
+  } finally {
+    rmSync(checkRoot, { recursive: true, force: true })
   }
-} finally {
-  if (mode === '--check' && before) {
-    restoreSnapshot(before)
-  } else {
+} else {
+  let headers = new Map()
+  try {
+    headers = stripProtectedHeaders(files)
+    const result = spawnSync(
+      'oxfmt',
+      ['-c', '.oxfmtrc.json', '--ignore-path', '.gitignore', '--write', '.'],
+      {
+        cwd: root,
+        stdio: 'inherit',
+      }
+    )
+    exitCode = result.status ?? 1
+  } finally {
     restoreProtectedHeaders(headers)
   }
 }

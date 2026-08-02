@@ -14,7 +14,7 @@ import (
 func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
-	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
+	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression, gzip.WithExcludedPathsRegexs([]string{`^/api/log/export/[^/]+/download$`})))
 	apiRouter.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
 	apiRouter.Use(middleware.GlobalAPIRateLimit())
 	anonymousRequestBodyLimit := middleware.AnonymousRequestBodyLimit()
@@ -281,6 +281,15 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		logExportRoute := logRoute.Group("/export")
+		logExportRoute.Use(middleware.UserAuth())
+		{
+			logExportRoute.POST("", controller.CreateLogExport)
+			logExportRoute.GET("", controller.ListLogExports)
+			logExportRoute.GET("/:task_id", controller.GetLogExport)
+			logExportRoute.GET("/:task_id/download", controller.DownloadLogExport)
+			logExportRoute.DELETE("/:task_id", controller.DeleteLogExport)
+		}
 
 		systemTaskRoute := apiRouter.Group("/system-task")
 		systemTaskRoute.Use(middleware.RootAuth())

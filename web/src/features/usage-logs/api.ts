@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import { buildQueryParams } from './lib/utils'
+import { buildQueryParams } from './lib/query'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -27,6 +27,9 @@ import type {
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
   UserInfo,
+  CreateLogExportRequest,
+  LogExportTask,
+  LogExportListResponse,
 } from './types'
 
 // ============================================================================
@@ -110,3 +113,53 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+// ============================================================================
+// Log Export APIs
+// ============================================================================
+
+export async function createLogExport(
+  request: CreateLogExportRequest
+): Promise<{ success: boolean; message?: string; data?: LogExportTask }> {
+  const res = await api.post('/api/log/export', request)
+  return res.data
+}
+
+export async function listLogExports(
+  page = 1,
+  pageSize = 20
+): Promise<LogExportListResponse> {
+  const res = await api.get(`/api/log/export?p=${page}&page_size=${pageSize}`)
+  return res.data
+}
+
+export async function getLogExport(
+  taskId: string
+): Promise<{ success: boolean; message?: string; data?: LogExportTask }> {
+  const res = await api.get(`/api/log/export/${taskId}`)
+  return res.data
+}
+
+export async function deleteLogExport(
+  taskId: string
+): Promise<{ success: boolean; message?: string }> {
+  const res = await api.delete(`/api/log/export/${taskId}`)
+  return res.data
+}
+
+export async function downloadLogExport(task: LogExportTask): Promise<void> {
+  const res = await api.get(`/api/log/export/${task.task_id}/download`, {
+    responseType: 'blob',
+    skipBusinessError: true,
+  })
+  const blob = res.data instanceof Blob ? res.data : new Blob([res.data])
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download =
+    task.file_name || `usage-logs-${task.category}.${task.format}`
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
