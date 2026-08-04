@@ -35,9 +35,17 @@ func ParseOpenAIReasoningEffortFromModelSuffix(modelName string) (string, string
 	return effort, baseModel
 }
 
-func ParseDeepSeekV4ThinkingSuffix(modelName string) (baseModel string, thinkingType string, effort string, ok bool) {
-	baseModel, suffix, ok := TrimEffortSuffixWithSuffixes(modelName, DeepSeekV4EffortSuffixes)
+func ParseDeepSeekV4EffortSuffix(modelName string) (baseModel string, effort string, ok bool) {
+	baseModel, effort, ok = TrimEffortSuffixWithSuffixes(modelName, DeepSeekV4EffortSuffixes)
 	if !ok || !strings.HasPrefix(baseModel, "deepseek-v4-") {
+		return modelName, "", false
+	}
+	return baseModel, effort, true
+}
+
+func ParseDeepSeekV4ThinkingSuffix(modelName string) (baseModel string, thinkingType string, effort string, ok bool) {
+	baseModel, suffix, ok := ParseDeepSeekV4EffortSuffix(modelName)
+	if !ok {
 		return modelName, "", "", false
 	}
 	switch suffix {
