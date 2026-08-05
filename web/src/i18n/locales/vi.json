@@ -995,6 +995,7 @@
     "Configure rate limiting rules for a specific user group.": "Cấu hình quy tắc giới hạn tốc độ cho một nhóm người dùng cụ thể.",
     "Configure routes": "Cấu hình route",
     "Configure the ratio for this group.": "Cấu hình tỷ lệ cho nhóm này.",
+    "Configure the request content used when testing this channel.": "Cấu hình nội dung yêu cầu được sử dụng khi kiểm tra kênh này.",
     "Configure upstream providers and routing.": "Cấu hình nhà cung cấp upstream và định tuyến.",
     "Configure Waffo Pancake hosted checkout integration for USD-priced top-ups": "Cấu hình tích hợp thanh toán Waffo Pancake (hosted checkout) cho nạp tiền theo USD",
     "Configure Waffo payment aggregation platform integration": "Cấu hình tích hợp nền tảng tổng hợp thanh toán Waffo",

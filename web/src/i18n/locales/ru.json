@@ -995,6 +995,7 @@
     "Configure rate limiting rules for a specific user group.": "Настроить правила ограничения скорости для конкретной группы пользователей.",
     "Configure routes": "Настроить маршруты",
     "Configure the ratio for this group.": "Настроить коэффициент для этой группы.",
+    "Configure the request content used when testing this channel.": "Настройте содержимое запроса для тестирования этого канала.",
     "Configure upstream providers and routing.": "Настроить провайдеров верхнего уровня и маршрутизацию.",
     "Configure Waffo Pancake hosted checkout integration for USD-priced top-ups": "Настроить хостовую интеграцию Waffo Pancake (hosted checkout) для пополнений в USD",
     "Configure Waffo payment aggregation platform integration": "Настроить интеграцию платёжной платформы Waffo",

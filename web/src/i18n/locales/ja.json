@@ -995,6 +995,7 @@
     "Configure rate limiting rules for a specific user group.": "特定のユーザーグループのレート制限ルールを設定します。",
     "Configure routes": "ルートを設定",
     "Configure the ratio for this group.": "このグループの比率を設定します。",
+    "Configure the request content used when testing this channel.": "このチャネルのテストに使用するリクエスト内容を設定します。",
     "Configure upstream providers and routing.": "アップストリームプロバイダーとルーティングを設定。",
     "Configure Waffo Pancake hosted checkout integration for USD-priced top-ups": "USD 建てのチャージ用に Waffo Pancake のホスト型チェックアウト連携を設定",
     "Configure Waffo payment aggregation platform integration": "Waffo決済アグリゲーションプラットフォームの連携を設定",

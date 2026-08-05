@@ -82,6 +82,7 @@ type ChannelTestContentSheetProps = {
   endpointType: string
   sessionOverrides: ChannelTestOverrides
   onApply: (overrides: ChannelTestOverrides) => void
+  showApply?: boolean
 }
 
 function isEndpoint(value: string): value is ChannelTestEndpoint {
@@ -152,6 +153,7 @@ export function ChannelTestContentSheet({
   endpointType,
   sessionOverrides,
   onApply,
+  showApply = true,
 }: ChannelTestContentSheetProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -610,14 +612,16 @@ export function ChannelTestContentSheet({
               {t('Save as channel default')}
             </Button>
           )}
-          <Button
-            onClick={handleApply}
-            disabled={
-              loading || configQuery.isError || Boolean(validationMessage)
-            }
-          >
-            {t('Apply to this test')}
-          </Button>
+          {showApply && (
+            <Button
+              onClick={handleApply}
+              disabled={
+                loading || configQuery.isError || Boolean(validationMessage)
+              }
+            >
+              {t('Apply to this test')}
+            </Button>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>

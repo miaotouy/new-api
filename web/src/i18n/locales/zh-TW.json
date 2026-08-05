@@ -995,6 +995,7 @@
     "Configure rate limiting rules for a specific user group.": "設定特定用戶分組的速率限制規則。",
     "Configure routes": "設定路由",
     "Configure the ratio for this group.": "設定此分組的比例。",
+    "Configure the request content used when testing this channel.": "設定測試此渠道時使用的請求內容。",
     "Configure upstream providers and routing.": "設定上游提供者和路由。",
     "Configure Waffo Pancake hosted checkout integration for USD-priced top-ups": "設定 Waffo Pancake 託管結帳，用於美元計價的儲值",
     "Configure Waffo payment aggregation platform integration": "設定 Waffo 支付聚合平台整合",

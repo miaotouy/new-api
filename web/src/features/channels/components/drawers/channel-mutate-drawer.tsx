@@ -27,6 +27,7 @@ import {
   ClipboardPaste,
   HelpCircle,
   KeyRound,
+  MessageSquareText,
   Loader2,
   Server,
   Sparkles,
@@ -182,6 +183,7 @@ import {
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
+import { ChannelTestContentSheet } from '../dialogs/channel-test-content-sheet'
 import { ModelMappingEditor } from '../model-mapping-editor'
 import {
   ChannelAdvancedSection,
@@ -190,6 +192,7 @@ import {
   ChannelBasicSection,
   ChannelEditorLoadingState,
   ChannelModelsSection,
+  ChannelTestContentSection,
 } from './sections'
 
 type ChannelMutateDrawerProps = {
@@ -245,12 +248,14 @@ const CHANNEL_EDITOR_SECTION_IDS = {
   identity: 'channel-section-identity',
   credentials: 'channel-section-credentials',
   models: 'channel-section-models',
+  testContent: 'channel-section-test-content',
   advanced: 'channel-section-advanced',
 } as const
 const CHANNEL_EDITOR_MAIN_SECTION_IDS = [
   CHANNEL_EDITOR_SECTION_IDS.identity,
   CHANNEL_EDITOR_SECTION_IDS.credentials,
   CHANNEL_EDITOR_SECTION_IDS.models,
+  CHANNEL_EDITOR_SECTION_IDS.testContent,
   CHANNEL_EDITOR_SECTION_IDS.advanced,
 ]
 const ADVANCED_SETTINGS_SECTION_IDS = {
@@ -646,6 +651,7 @@ export function ChannelMutateDrawer({
   const [paramOverrideEditorOpen, setParamOverrideEditorOpen] = useState(false)
   const [advancedCustomEditorOpen, setAdvancedCustomEditorOpen] =
     useState(false)
+  const [testContentSheetOpen, setTestContentSheetOpen] = useState(false)
   const [clipboardConnectionInfo, setClipboardConnectionInfo] =
     useState<ChannelConnectionInfo | null>(null)
 
@@ -1108,17 +1114,29 @@ export function ChannelMutateDrawer({
       status: modelsStatus,
       icon: <Boxes className='h-4 w-4' aria-hidden='true' />,
     },
-    {
-      id: CHANNEL_EDITOR_SECTION_IDS.advanced,
-      title: t('Advanced Settings'),
-      description: advancedSummary,
-      statusLabel: advancedSummary ?? t('Advanced Settings'),
-      status: advancedStatus,
-      icon: <Settings className='h-4 w-4' aria-hidden='true' />,
-      configured: advancedConfigured,
-      children: advancedNavChildren,
-    },
   ]
+  if (isEditing) {
+    editorNavItems.push({
+      id: CHANNEL_EDITOR_SECTION_IDS.testContent,
+      title: t('Test Content'),
+      description: t(
+        'Configure the request content used when testing this channel.'
+      ),
+      statusLabel: t('Test Content'),
+      status: 'idle',
+      icon: <MessageSquareText className='h-4 w-4' aria-hidden='true' />,
+    })
+  }
+  editorNavItems.push({
+    id: CHANNEL_EDITOR_SECTION_IDS.advanced,
+    title: t('Advanced Settings'),
+    description: advancedSummary,
+    statusLabel: advancedSummary ?? t('Advanced Settings'),
+    status: advancedStatus,
+    icon: <Settings className='h-4 w-4' aria-hidden='true' />,
+    configured: advancedConfigured,
+    children: advancedNavChildren,
+  })
 
   // Extract redirect models from model_mapping (target values)
   const redirectModelList = useMemo(
@@ -1842,6 +1860,7 @@ export function ChannelMutateDrawer({
         setActiveEditorSectionId(CHANNEL_EDITOR_SECTION_IDS.identity)
         setExpandedEditorNavItemId(undefined)
         setAdvancedSettingsOpen(false)
+        setTestContentSheetOpen(false)
         setClipboardConnectionInfo(null)
       }
     },
@@ -3602,6 +3621,37 @@ export function ChannelMutateDrawer({
                       </ChannelModelsSection>
                     </div>
 
+                    {isEditing && (
+                      <div
+                        id={CHANNEL_EDITOR_SECTION_IDS.testContent}
+                        className='scroll-mt-4'
+                      >
+                        <ChannelTestContentSection>
+                          <div className='border-border/60 flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between'>
+                            <div className='min-w-0 space-y-1'>
+                              <p className='text-sm font-medium'>
+                                {t('Test Content')}
+                              </p>
+                              <p className='text-muted-foreground text-xs'>
+                                {t(
+                                  'Configure the request content used when testing this channel.'
+                                )}
+                              </p>
+                            </div>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              className='shrink-0'
+                              onClick={() => setTestContentSheetOpen(true)}
+                            >
+                              <Settings className='mr-2 size-4' />
+                              {t('Configure')}
+                            </Button>
+                          </div>
+                        </ChannelTestContentSection>
+                      </div>
+                    )}
+
                     <div
                       id={CHANNEL_EDITOR_SECTION_IDS.advanced}
                       className='scroll-mt-4'
@@ -4695,6 +4745,18 @@ export function ChannelMutateDrawer({
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {isEditing && channelId !== null && (
+        <ChannelTestContentSheet
+          open={testContentSheetOpen}
+          onOpenChange={setTestContentSheetOpen}
+          channelId={channelId}
+          endpointType='auto'
+          sessionOverrides={{}}
+          onApply={() => undefined}
+          showApply={false}
+        />
+      )}
 
       {paramOverrideEditorOpen && !sensitiveLocked && (
         <ParamOverrideEditorDialog
