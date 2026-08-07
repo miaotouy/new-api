@@ -16,7 +16,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
+	hostdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -24,10 +24,12 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
+	hosttypes "github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
 	"github.com/tidwall/gjson"
@@ -46,7 +48,7 @@ func resolveChannelTestEndpoint(channel *model.Channel, modelName string, reques
 	requestedEndpoint = strings.TrimSpace(requestedEndpoint)
 	if requestedEndpoint != "" && requestedEndpoint != "auto" {
 		endpoint := constant.EndpointType(requestedEndpoint)
-		if !dto.IsSupportedChannelTestEndpoint(endpoint) {
+		if !hostdto.IsSupportedChannelTestEndpoint(endpoint) {
 			return "", fmt.Errorf("unsupported channel test endpoint: %s", requestedEndpoint)
 		}
 		return endpoint, nil
@@ -112,7 +114,7 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, sessionOverrides ...map[string]dto.ChannelTestContentOverride) (result testResult) {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool, sessionOverrides ...map[string]hostdto.ChannelTestContentOverride) (result testResult) {
 	resolvedEndpointName := ""
 	defer func() {
 		if result.endpointType == "" {
@@ -198,7 +200,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 
 	relayFormat := relayFormatForChannelTestEndpoint(resolvedEndpoint)
 
-	var overrides map[string]dto.ChannelTestContentOverride
+	var overrides map[string]hostdto.ChannelTestContentOverride
 	if len(sessionOverrides) > 0 {
 		overrides = sessionOverrides[0]
 	}
@@ -244,11 +246,10 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 
 	apiType, _ := common.ChannelType2APIType(channel.Type)
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
-		apiType != constant.APITypeOpenAI &&
-		apiType != constant.APITypeCodex {
+		!common.IsResponsesCompactAPIType(apiType) {
 		return testResult{
 			context:     c,
-			localErr:    fmt.Errorf("responses compaction test only supports openai/codex channels, got api type %d", apiType),
+			localErr:    fmt.Errorf("responses compaction test is not supported for api type %d", apiType),
 			newAPIError: types.NewError(fmt.Errorf("unsupported api type: %d", apiType), types.ErrorCodeInvalidApiType),
 		}
 	}
@@ -505,7 +506,7 @@ func attachTestBillingRequestInput(info *relaycommon.RelayInfo, request dto.Requ
 	return nil
 }
 
-func settleTestQuota(info *relaycommon.RelayInfo, priceData types.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult) {
+func settleTestQuota(info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage) (int, *billingexpr.TieredResult) {
 	if usage != nil && info != nil && info.TieredBillingSnapshot != nil {
 		isClaudeUsageSemantic := usage.UsageSemantic == "anthropic" || info.GetFinalRequestRelayFormat() == types.RelayFormatClaude
 		usedVars := billingexpr.UsedVars(info.TieredBillingSnapshot.ExprString)
@@ -527,7 +528,7 @@ func settleTestQuota(info *relaycommon.RelayInfo, priceData types.PriceData, usa
 	return int(priceData.ModelPrice * common.QuotaPerUnit), nil
 }
 
-func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData types.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {
+func buildTestLogOther(c *gin.Context, info *relaycommon.RelayInfo, priceData hosttypes.PriceData, usage *dto.Usage, tieredResult *billingexpr.TieredResult) map[string]interface{} {
 	other := service.GenerateTextOtherInfo(c, info, priceData.ModelRatio, priceData.GroupRatioInfo.GroupRatio, priceData.CompletionRatio,
 		usage.PromptTokensDetails.CachedTokens, priceData.CacheRatio, priceData.ModelPrice, priceData.GroupRatioInfo.GroupSpecialRatio)
 	if tieredResult != nil {
@@ -666,7 +667,7 @@ func detectErrorMessageFromJSONBytes(jsonBytes []byte) string {
 	return message
 }
 
-func builtinChannelTestOverrides() map[string]dto.ChannelTestContentOverride {
+func builtinChannelTestOverrides() map[string]hostdto.ChannelTestContentOverride {
 	openAIContent := "hi"
 	anthropicContent := "hi"
 	geminiContent := "hi"
@@ -675,7 +676,7 @@ func builtinChannelTestOverrides() map[string]dto.ChannelTestContentOverride {
 	input := "hello world"
 	prompt := "a cute cat"
 	query := "What is Deep Learning?"
-	return map[string]dto.ChannelTestContentOverride{
+	return map[string]hostdto.ChannelTestContentOverride{
 		string(constant.EndpointTypeOpenAI):                {Content: &openAIContent},
 		string(constant.EndpointTypeAnthropic):             {Content: &anthropicContent},
 		string(constant.EndpointTypeGemini):                {Content: &geminiContent},
@@ -690,24 +691,24 @@ func builtinChannelTestOverrides() map[string]dto.ChannelTestContentOverride {
 	}
 }
 
-func getChannelTestRequestConfig(channel *model.Channel) (dto.ChannelTestRequestConfig, error) {
+func getChannelTestRequestConfig(channel *model.Channel) (hostdto.ChannelTestRequestConfig, error) {
 	if channel == nil || strings.TrimSpace(channel.TestRequestConfig) == "" {
-		return dto.ChannelTestRequestConfig{Version: dto.ChannelTestRequestConfigVersion, Overrides: map[string]dto.ChannelTestContentOverride{}}, nil
+		return hostdto.ChannelTestRequestConfig{Version: hostdto.ChannelTestRequestConfigVersion, Overrides: map[string]hostdto.ChannelTestContentOverride{}}, nil
 	}
-	config := dto.ChannelTestRequestConfig{}
+	config := hostdto.ChannelTestRequestConfig{}
 	if err := common.UnmarshalJsonStrStrict(channel.TestRequestConfig, &config); err != nil {
-		return dto.ChannelTestRequestConfig{}, fmt.Errorf("invalid channel test request config: %w", err)
+		return hostdto.ChannelTestRequestConfig{}, fmt.Errorf("invalid channel test request config: %w", err)
 	}
-	if err := dto.ValidateChannelTestRequestConfig(config, false); err != nil {
-		return dto.ChannelTestRequestConfig{}, fmt.Errorf("invalid channel test request config: %w", err)
+	if err := hostdto.ValidateChannelTestRequestConfig(config, false); err != nil {
+		return hostdto.ChannelTestRequestConfig{}, fmt.Errorf("invalid channel test request config: %w", err)
 	}
 	return config, nil
 }
 
-func resolveChannelTestContent(channel *model.Channel, endpoint constant.EndpointType, sessionOverrides map[string]dto.ChannelTestContentOverride) (dto.ChannelTestContentOverride, error) {
+func resolveChannelTestContent(channel *model.Channel, endpoint constant.EndpointType, sessionOverrides map[string]hostdto.ChannelTestContentOverride) (hostdto.ChannelTestContentOverride, error) {
 	if sessionOverride, ok := sessionOverrides[string(endpoint)]; ok {
-		if err := dto.ValidateChannelTestContentOverride(endpoint, sessionOverride, true); err != nil {
-			return dto.ChannelTestContentOverride{}, err
+		if err := hostdto.ValidateChannelTestContentOverride(endpoint, sessionOverride, true); err != nil {
+			return hostdto.ChannelTestContentOverride{}, err
 		}
 		if sessionOverride.Mode == "custom" {
 			sessionOverride.Mode = ""
@@ -717,7 +718,7 @@ func resolveChannelTestContent(channel *model.Channel, endpoint constant.Endpoin
 	}
 	config, err := getChannelTestRequestConfig(channel)
 	if err != nil {
-		return dto.ChannelTestContentOverride{}, err
+		return hostdto.ChannelTestContentOverride{}, err
 	}
 	if override, ok := config.Overrides[string(endpoint)]; ok {
 		return override, nil
@@ -725,7 +726,7 @@ func resolveChannelTestContent(channel *model.Channel, endpoint constant.Endpoin
 	return builtinChannelTestOverrides()[string(endpoint)], nil
 }
 
-func buildChannelTestRequest(modelName string, endpoint constant.EndpointType, channel *model.Channel, isStream bool, sessionOverrides map[string]dto.ChannelTestContentOverride) (dto.Request, error) {
+func buildChannelTestRequest(modelName string, endpoint constant.EndpointType, channel *model.Channel, isStream bool, sessionOverrides map[string]hostdto.ChannelTestContentOverride) (dto.Request, error) {
 	override, err := resolveChannelTestContent(channel, endpoint, sessionOverrides)
 	if err != nil {
 		return nil, err
@@ -899,12 +900,12 @@ func TestChannelWithRequest(c *gin.Context) {
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
-	request := dto.ChannelTestRequest{}
+	request := hostdto.ChannelTestRequest{}
 	if err := common.DecodeJsonStrict(c.Request.Body, &request); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid channel test request"})
 		return
 	}
-	if err := dto.ValidateChannelTestOverrides(request.TestRequestOverrides); err != nil {
+	if err := hostdto.ValidateChannelTestOverrides(request.TestRequestOverrides); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -935,8 +936,8 @@ func GetChannelTestConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data": dto.ChannelTestConfigPanelData{
-			Version:          dto.ChannelTestRequestConfigVersion,
+		"data": hostdto.ChannelTestConfigPanelData{
+			Version:          hostdto.ChannelTestRequestConfigVersion,
 			BuiltinOverrides: builtinChannelTestOverrides(),
 			Overrides:        config.Overrides,
 		},
@@ -949,12 +950,12 @@ func UpdateChannelTestConfig(c *gin.Context) {
 		return
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64<<10)
-	config := dto.ChannelTestRequestConfig{}
+	config := hostdto.ChannelTestRequestConfig{}
 	if err := common.DecodeJsonStrict(c.Request.Body, &config); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "invalid channel test request config"})
 		return
 	}
-	if err := dto.ValidateChannelTestRequestConfig(config, false); err != nil {
+	if err := hostdto.ValidateChannelTestRequestConfig(config, false); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}

@@ -5,8 +5,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
+	hostdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,9 +40,9 @@ func TestResolveChannelTestEndpoint(t *testing.T) {
 
 func TestBuildChannelTestRequestResolvesContentPriority(t *testing.T) {
 	channelContent := "channel default"
-	configBytes, err := common.Marshal(dto.ChannelTestRequestConfig{
-		Version: dto.ChannelTestRequestConfigVersion,
-		Overrides: map[string]dto.ChannelTestContentOverride{
+	configBytes, err := common.Marshal(hostdto.ChannelTestRequestConfig{
+		Version: hostdto.ChannelTestRequestConfigVersion,
+		Overrides: map[string]hostdto.ChannelTestContentOverride{
 			string(constant.EndpointTypeOpenAI): {Content: &channelContent},
 		},
 	})
@@ -54,7 +55,7 @@ func TestBuildChannelTestRequestResolvesContentPriority(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, channelContent, openAIRequest.Messages[0].Content)
 
-	request, err = buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAI, channel, false, map[string]dto.ChannelTestContentOverride{
+	request, err = buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAI, channel, false, map[string]hostdto.ChannelTestContentOverride{
 		string(constant.EndpointTypeOpenAI): {Mode: "builtin"},
 	})
 	require.NoError(t, err)
@@ -63,7 +64,7 @@ func TestBuildChannelTestRequestResolvesContentPriority(t *testing.T) {
 	assert.Equal(t, "hi", openAIRequest.Messages[0].Content)
 
 	sessionContent := "session override"
-	request, err = buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAI, channel, false, map[string]dto.ChannelTestContentOverride{
+	request, err = buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAI, channel, false, map[string]hostdto.ChannelTestContentOverride{
 		string(constant.EndpointTypeOpenAI): {Mode: "custom", Content: &sessionContent},
 	})
 	require.NoError(t, err)
@@ -74,7 +75,7 @@ func TestBuildChannelTestRequestResolvesContentPriority(t *testing.T) {
 
 func TestBuildChannelTestRequestEncodesResponsesContent(t *testing.T) {
 	content := "quoted \"value\"\n你好"
-	request, err := buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAIResponse, nil, false, map[string]dto.ChannelTestContentOverride{
+	request, err := buildChannelTestRequest("gpt-4o-mini", constant.EndpointTypeOpenAIResponse, nil, false, map[string]hostdto.ChannelTestContentOverride{
 		string(constant.EndpointTypeOpenAIResponse): {Mode: "custom", Content: &content},
 	})
 	require.NoError(t, err)

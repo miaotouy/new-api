@@ -16,15 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, KeyRound, Settings2, WalletCards } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useForm, type SubmitErrorHandler } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, KeyRound, Settings2, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, type SubmitErrorHandler } from "react-hook-form";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
-import { DateTimePicker } from '@/components/datetime-picker'
+import { DateTimePicker } from "@/components/datetime-picker";
 import {
   SideDrawerSection,
   SideDrawerSectionHeader,
@@ -33,14 +33,14 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
   sideDrawerSwitchItemClassName,
-} from '@/components/drawer-layout'
-import { MultiSelect } from '@/components/multi-select'
-import { Button } from '@/components/ui/button'
+} from "@/components/drawer-layout";
+import { MultiSelect } from "@/components/multi-select";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+} from "@/components/ui/collapsible";
 import {
   Form,
   FormControl,
@@ -49,15 +49,15 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetClose,
@@ -66,170 +66,280 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from '@/components/ui/sheet'
-import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
-import { useStatus } from '@/hooks/use-status'
-import { getUserModels, getUserGroups } from '@/lib/api'
-import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { useStatus } from "@/hooks/use-status";
+import { getUserModels, getUserGroups } from "@/lib/api";
+import { getCurrencyDisplay, getCurrencyLabel } from "@/lib/currency";
+import { cn } from "@/lib/utils";
 
 import {
   createApiKey,
+  updateApiKey,
   getApiKey,
   getApiKeyRouteOptions,
   getApiKeyRoutes,
-  updateApiKey,
+  getTokenAutoGroups,
   updateApiKeyRoutes,
-} from '../api'
-import { ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
+} from "../api";
+import { ERROR_MESSAGES, SUCCESS_MESSAGES } from "../constants";
 import {
   getApiKeyFormSchema,
   type ApiKeyFormValues,
   getApiKeyFormDefaultValues,
   transformFormDataToPayload,
   transformApiKeyToFormDefaults,
-} from '../lib'
-import type { ApiKey, ApiKeyRouteRule } from '../types'
+} from "../lib";
+import type { ApiKey, ApiKeyRouteRule } from "../types";
 import {
   ApiKeyGroupCombobox,
   type ApiKeyGroupOption,
-} from './api-key-group-combobox'
-import { useApiKeys } from './api-keys-provider'
-import { TokenRouteEditor } from './token-route-editor'
+} from "./api-key-group-combobox";
+import { useApiKeys } from "./api-keys-provider";
+import { AutoGroupOrderEditor } from "./auto-group-order-editor";
+import { TokenRouteEditor } from "./token-route-editor";
 
 type ApiKeyMutateDrawerProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  currentRow?: ApiKey
-}
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  currentRow?: ApiKey;
+};
 
 export function ApiKeysMutateDrawer({
   open,
   onOpenChange,
   currentRow,
 }: ApiKeyMutateDrawerProps) {
-  const { t } = useTranslation()
-  const isUpdate = !!currentRow
-  const { triggerRefresh } = useApiKeys()
-  const { status } = useStatus()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [routeItems, setRouteItems] = useState<ApiKeyRouteRule[]>([])
-  const defaultUseAutoGroup = status?.default_use_auto_group === true
+  const { t } = useTranslation();
+  const isUpdate = !!currentRow;
+  const currentRowId = currentRow?.id;
+  const { triggerRefresh } = useApiKeys();
+  const { status, loading: statusLoading } = useStatus();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [routeItems, setRouteItems] = useState<ApiKeyRouteRule[]>([]);
+  const [initializedTarget, setInitializedTarget] = useState<string | null>(
+    null,
+  );
+  const defaultUseAutoGroup = status?.default_use_auto_group === true;
 
   // Fetch models
   const { data: modelsData } = useQuery({
-    queryKey: ['user-models'],
+    queryKey: ["user-models"],
     queryFn: getUserModels,
     enabled: open,
     staleTime: 0,
-  })
+  });
 
   // Fetch groups
-  const { data: groupsData } = useQuery({
-    queryKey: ['user-groups'],
+  const {
+    data: groupsData,
+    isFetched: groupsFetched,
+    isFetching: groupsFetching,
+  } = useQuery({
+    queryKey: ["user-groups"],
     queryFn: getUserGroups,
     enabled: open,
     staleTime: 0,
-  })
+  });
+
+  const {
+    data: apiKeyData,
+    isFetched: apiKeyFetched,
+    isFetching: apiKeyFetching,
+  } = useQuery({
+    queryKey: ["api-key", currentRowId],
+    queryFn: () => getApiKey(currentRowId ?? 0),
+    enabled: open && isUpdate && currentRowId !== undefined,
+    staleTime: 0,
+  });
+
+  const {
+    data: autoGroupsData,
+    isFetched: autoGroupsFetched,
+    isFetching: autoGroupsFetching,
+  } = useQuery({
+    queryKey: ["token-auto-groups"],
+    queryFn: getTokenAutoGroups,
+    enabled: open,
+    staleTime: 0,
+  });
 
   const { data: routeOptionsData } = useQuery({
-    queryKey: ['token-route-options', currentRow?.id],
-    queryFn: () => getApiKeyRouteOptions(currentRow?.id ?? 0),
-    enabled: open && isUpdate && !!currentRow,
+    queryKey: ["token-route-options", currentRowId],
+    queryFn: () => getApiKeyRouteOptions(currentRowId ?? 0),
+    enabled: open && isUpdate && currentRowId !== undefined,
     staleTime: 30_000,
-  })
+  });
 
-  const models = modelsData?.data || []
-  const groupsRaw = groupsData?.data || {}
-  const groups: ApiKeyGroupOption[] = Object.entries(groupsRaw).map(
-    ([key, info]) => ({
-      value: key,
-      label: key,
-      desc: info.desc || key,
-      ratio: info.ratio,
-    })
-  )
-  const backendHasAuto = groups.some((g) => g.value === 'auto')
-  const schema = getApiKeyFormSchema(t)
+  const models = modelsData?.data || [];
+  const groups = useMemo<ApiKeyGroupOption[]>(
+    () =>
+      Object.entries(groupsData?.data || {}).map(([key, info]) => ({
+        value: key,
+        label: key,
+        desc: info.desc || key,
+        ratio: info.ratio,
+      })),
+    [groupsData],
+  );
+  const backendHasAuto = groups.some((g) => g.value === "auto");
+  const availableAutoGroupNames = useMemo(
+    () => groups.filter((group) => group.value !== "auto").map((g) => g.value),
+    [groups],
+  );
+  const globalAutoGroups = useMemo(() => {
+    const available = new Set(availableAutoGroupNames);
+    return (autoGroupsData?.data?.groups || []).filter((group) =>
+      available.has(group),
+    );
+  }, [autoGroupsData, availableAutoGroupNames]);
+  const globalAutoGroupOptions = useMemo(() => {
+    const groupsByValue = new Map(groups.map((group) => [group.value, group]));
+    return globalAutoGroups.flatMap((group) => {
+      const option = groupsByValue.get(group);
+      return option ? [option] : [];
+    });
+  }, [globalAutoGroups, groups]);
+  const maxAutoGroups =
+    Number.isInteger(autoGroupsData?.data?.max_count) &&
+    Number(autoGroupsData?.data?.max_count) > 0
+      ? Number(autoGroupsData?.data?.max_count)
+      : 5;
+  const schema = useMemo(
+    () => getApiKeyFormSchema(t, maxAutoGroups),
+    [t, maxAutoGroups],
+  );
 
   const form = useForm<ApiKeyFormValues>({
     resolver: zodResolver(schema),
     defaultValues: getApiKeyFormDefaultValues(defaultUseAutoGroup),
-  })
+  });
 
   // Load existing data when updating
   useEffect(() => {
-    if (open && isUpdate && currentRow) {
-      void Promise.all([
-        getApiKey(currentRow.id),
-        getApiKeyRoutes(currentRow.id),
-      ]).then(([result, routesResult]) => {
-        if (result.success && result.data) {
-          form.reset(transformApiKeyToFormDefaults(result.data))
-        }
-        setRouteItems(
-          routesResult.success && routesResult.data ? routesResult.data : []
-        )
-      })
-    } else if (open && !isUpdate) {
-      form.reset(
-        getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto)
-      )
-      setRouteItems([])
+    if (!open) {
+      setInitializedTarget(null);
+      return;
     }
-  }, [open, isUpdate, currentRow, form, defaultUseAutoGroup, backendHasAuto])
+    if (
+      !groupsFetched ||
+      groupsFetching ||
+      !autoGroupsFetched ||
+      autoGroupsFetching
+    ) {
+      return;
+    }
+    if (isUpdate && (!apiKeyFetched || apiKeyFetching)) return;
+    if (!isUpdate && statusLoading) return;
+
+    const target =
+      isUpdate && currentRow ? `update:${currentRow.id}` : "create";
+    if (initializedTarget === target) return;
+    if (isUpdate && currentRow) {
+      if (apiKeyData?.success && apiKeyData.data) {
+        form.reset(
+          transformApiKeyToFormDefaults(
+            apiKeyData.data,
+            availableAutoGroupNames,
+            maxAutoGroups,
+          ),
+        );
+        setInitializedTarget(target);
+      }
+    } else {
+      form.reset(
+        getApiKeyFormDefaultValues(defaultUseAutoGroup && backendHasAuto),
+      );
+      setInitializedTarget(target);
+    }
+  }, [
+    open,
+    isUpdate,
+    currentRow,
+    form,
+    defaultUseAutoGroup,
+    statusLoading,
+    backendHasAuto,
+    groupsFetched,
+    groupsFetching,
+    autoGroupsFetched,
+    autoGroupsFetching,
+    apiKeyData,
+    apiKeyFetched,
+    apiKeyFetching,
+    availableAutoGroupNames,
+    maxAutoGroups,
+    initializedTarget,
+  ]);
+
+  const formTarget =
+    isUpdate && currentRow ? `update:${currentRow.id}` : "create";
+  const isFormInitialized = initializedTarget === formTarget;
+  const selectedGroup = form.watch("group");
+
+  useEffect(() => {
+    if (!open || !isUpdate || currentRowId === undefined) {
+      if (!isUpdate) setRouteItems([]);
+      return;
+    }
+    void getApiKeyRoutes(currentRowId).then((result) => {
+      setRouteItems(result.success && result.data ? result.data : []);
+    });
+  }, [open, isUpdate, currentRowId]);
 
   // Correct group after groups load: if the form value is not in available groups, fall back
   useEffect(() => {
-    if (groups.length === 0) return
-    const currentGroup = form.getValues('group')
+    if (groups.length === 0) return;
+    const currentGroup = selectedGroup;
     if (currentGroup && !groups.some((g) => g.value === currentGroup)) {
       const fallback =
-        groups.find((g) => g.value === 'default')?.value ??
+        groups.find((g) => g.value === "default")?.value ??
         groups[0]?.value ??
-        ''
-      form.setValue('group', fallback)
-      if (currentGroup === 'auto') {
-        form.setValue('cross_group_retry', false)
+        "";
+      form.setValue("group", fallback);
+      if (currentGroup === "auto") {
+        form.setValue("auto_groups", []);
+        form.setValue("auto_groups_mode", "inherit");
+        form.setValue("cross_group_retry", false);
       }
     }
-  }, [groups, form])
+  }, [groups, form, selectedGroup]);
 
   const onSubmit = async (data: ApiKeyFormValues) => {
-    if (data.route_mode === 'manual' && routeItems.length === 0) {
-      toast.error(t('Add at least one manual route candidate'))
-      return
+    if (data.route_mode === "manual" && routeItems.length === 0) {
+      toast.error(t("Add at least one manual route candidate"));
+      return;
     }
-    setIsSubmitting(true)
+    setIsSubmitting(true);
     try {
-      const basePayload = transformFormDataToPayload(data)
+      const basePayload = transformFormDataToPayload(data);
 
       if (isUpdate && currentRow) {
         const result = await updateApiKey({
           ...basePayload,
           id: currentRow.id,
-        })
+        });
         if (result.success) {
           const routeResult = await updateApiKeyRoutes(
             currentRow.id,
-            data.route_mode === 'manual' ? routeItems : []
-          )
+            data.route_mode === "manual" ? routeItems : [],
+          );
           if (!routeResult.success) {
-            toast.error(routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED))
-            return
+            toast.error(routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED));
+            return;
           }
-          toast.success(t(SUCCESS_MESSAGES.API_KEY_UPDATED))
-          onOpenChange(false)
-          triggerRefresh()
+          toast.success(t(SUCCESS_MESSAGES.API_KEY_UPDATED));
+          onOpenChange(false);
+          triggerRefresh();
         } else {
-          toast.error(result.message || t(ERROR_MESSAGES.UPDATE_FAILED))
+          toast.error(result.message || t(ERROR_MESSAGES.UPDATE_FAILED));
         }
       } else {
         // Create mode - handle batch creation
-        const count = data.tokenCount || 1
-        let successCount = 0
+        const count = data.tokenCount || 1;
+        let successCount = 0;
 
         for (let i = 0; i < count; i++) {
           const result = await createApiKey({
@@ -237,123 +347,124 @@ export function ApiKeysMutateDrawer({
             name:
               i === 0 && data.name
                 ? data.name
-                : `${data.name || 'default'}-${Math.random().toString(36).slice(2, 8)}`,
-          })
+                : `${data.name || "default"}-${Math.random().toString(36).slice(2, 8)}`,
+          });
           if (result.success) {
-            successCount++
+            successCount++;
             if (result.data?.id) {
               const routeResult = await updateApiKeyRoutes(
                 result.data.id,
-                data.route_mode === 'manual' ? routeItems : []
-              )
+                data.route_mode === "manual" ? routeItems : [],
+              );
               if (!routeResult.success) {
                 toast.error(
-                  routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED)
-                )
-                break
+                  routeResult.message || t(ERROR_MESSAGES.UPDATE_FAILED),
+                );
+                break;
               }
             }
           } else {
-            toast.error(result.message || t(ERROR_MESSAGES.CREATE_FAILED))
-            break
+            toast.error(result.message || t(ERROR_MESSAGES.CREATE_FAILED));
+            break;
           }
         }
 
         if (successCount > 0) {
           toast.success(
-            t('Successfully created {{count}} API Key(s)', {
+            t("Successfully created {{count}} API Key(s)", {
               count: successCount,
-            })
-          )
-          onOpenChange(false)
-          triggerRefresh()
+            }),
+          );
+          onOpenChange(false);
+          triggerRefresh();
         }
       }
     } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED))
+      toast.error(t(ERROR_MESSAGES.UNEXPECTED));
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   const onInvalid: SubmitErrorHandler<ApiKeyFormValues> = () => {
-    toast.error(t('Please fix the highlighted fields before saving'))
-  }
+    toast.error(t("Please fix the highlighted fields before saving"));
+  };
 
   const handleSetExpiry = (months: number, days: number, hours: number) => {
     if (months === 0 && days === 0 && hours === 0) {
-      form.setValue('expired_time', undefined)
-      return
+      form.setValue("expired_time", undefined);
+      return;
     }
 
-    const now = new Date()
-    now.setMonth(now.getMonth() + months)
-    now.setDate(now.getDate() + days)
-    now.setHours(now.getHours() + hours)
+    const now = new Date();
+    now.setMonth(now.getMonth() + months);
+    now.setDate(now.getDate() + days);
+    now.setHours(now.getHours() + hours);
 
-    form.setValue('expired_time', now)
-  }
+    form.setValue("expired_time", now);
+  };
 
-  const { meta: currencyMeta } = getCurrencyDisplay()
-  const currencyLabel = getCurrencyLabel()
-  const tokensOnly = currencyMeta.kind === 'tokens'
-  const quotaLabel = t('Quota ({{currency}})', { currency: currencyLabel })
+  const { meta: currencyMeta } = getCurrencyDisplay();
+  const currencyLabel = getCurrencyLabel();
+  const tokensOnly = currencyMeta.kind === "tokens";
+  const quotaLabel = t("Quota ({{currency}})", { currency: currencyLabel });
   const quotaPlaceholder = tokensOnly
-    ? t('Enter quota in tokens')
-    : t('Enter quota in {{currency}}', { currency: currencyLabel })
-  const selectedGroup = form.watch('group')
-  const unlimitedQuota = form.watch('unlimited_quota')
-  const routeMode = form.watch('route_mode')
+    ? t("Enter quota in tokens")
+    : t("Enter quota in {{currency}}", { currency: currencyLabel });
+  const autoGroupsMode = form.watch("auto_groups_mode");
+  const unlimitedQuota = form.watch("unlimited_quota");
+  const routeMode = form.watch("route_mode");
   const routeGroups = groups
     .map((group) => group.value)
-    .filter((group) => group !== 'auto')
-  const routeOptions = routeOptionsData?.data ?? []
+    .filter((group) => group !== "auto");
+  const routeOptions = routeOptionsData?.data ?? [];
 
   return (
     <Sheet
       open={open}
       onOpenChange={(v) => {
-        onOpenChange(v)
+        onOpenChange(v);
         if (!v) {
-          form.reset()
-          setRouteItems([])
+          form.reset();
         }
       }}
     >
       <SheetContent
-        className={sideDrawerContentClassName('max-w-none sm:!max-w-[620px]')}
+        className={sideDrawerContentClassName("max-w-none sm:!max-w-[620px]")}
       >
         <SheetHeader className={sideDrawerHeaderClassName()}>
           <SheetTitle>
-            {isUpdate ? t('Update API Key') : t('Create API Key')}
+            {isUpdate ? t("Update API Key") : t("Create API Key")}
           </SheetTitle>
           <SheetDescription>
             {isUpdate
-              ? t('Update the API key by providing necessary info.')
-              : t('Add a new API key by providing necessary info.')}
+              ? t("Update the API key by providing necessary info.")
+              : t("Add a new API key by providing necessary info.")}
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
-            id='api-key-form'
+            id="api-key-form"
             onSubmit={form.handleSubmit(onSubmit, onInvalid)}
-            className={sideDrawerFormClassName('gap-5')}
+            aria-busy={!isFormInitialized}
+            inert={!isFormInitialized || isSubmitting ? true : undefined}
+            className={sideDrawerFormClassName("gap-5")}
           >
             <SideDrawerSection>
               <SideDrawerSectionHeader
-                title={t('Basic Information')}
-                description={t('Set API key basic information')}
-                icon={<KeyRound className='size-4' />}
-                iconTone='info'
+                title={t("Basic Information")}
+                description={t("Set API key basic information")}
+                icon={<KeyRound className="size-4" />}
+                iconTone="info"
               />
               <FormField
                 control={form.control}
-                name='name'
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Name')}</FormLabel>
+                    <FormLabel>{t("Name")}</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder={t('Enter a name')} />
+                      <Input {...field} placeholder={t("Enter a name")} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -362,16 +473,27 @@ export function ApiKeysMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='group'
+                name="group"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Group')}</FormLabel>
+                    <FormLabel>{t("Group")}</FormLabel>
                     <FormControl>
                       <ApiKeyGroupCombobox
                         options={groups}
                         value={field.value}
-                        onValueChange={field.onChange}
-                        placeholder={t('Select a group')}
+                        onValueChange={(group) => {
+                          field.onChange(group);
+                          if (group === "auto") {
+                            form.setValue("cross_group_retry", true, {
+                              shouldDirty: true,
+                            });
+                            return;
+                          }
+                          form.setValue("cross_group_retry", false, {
+                            shouldDirty: true,
+                          });
+                        }}
+                        placeholder={t("Select a group")}
                       />
                     </FormControl>
                     <FormMessage />
@@ -379,19 +501,60 @@ export function ApiKeysMutateDrawer({
                 )}
               />
 
-              {selectedGroup === 'auto' && (
+              {selectedGroup === "auto" && (
                 <FormField
                   control={form.control}
-                  name='cross_group_retry'
+                  name="auto_groups"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("Auto group order")}</FormLabel>
+                      <FormDescription>
+                        {t(
+                          "Choose and order the groups this API key will try.",
+                        )}
+                      </FormDescription>
+                      <FormControl>
+                        <AutoGroupOrderEditor
+                          value={field.value}
+                          mode={autoGroupsMode}
+                          options={groups}
+                          globalOptions={globalAutoGroupOptions}
+                          maxCount={maxAutoGroups}
+                          onChange={(value) => {
+                            form.setValue("auto_groups_mode", value.mode, {
+                              shouldDirty: true,
+                              shouldValidate: false,
+                            });
+                            form.setValue(
+                              "auto_groups",
+                              value.groups.slice(0, maxAutoGroups),
+                              {
+                                shouldDirty: true,
+                                shouldValidate: true,
+                              },
+                            );
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {selectedGroup === "auto" && (
+                <FormField
+                  control={form.control}
+                  name="cross_group_retry"
                   render={({ field }) => (
                     <FormItem className={sideDrawerSwitchItemClassName()}>
-                      <div className='flex flex-col gap-0.5'>
-                        <FormLabel className='text-sm'>
-                          {t('Cross-group retry')}
+                      <div className="flex flex-col gap-0.5">
+                        <FormLabel className="text-sm">
+                          {t("Cross-group retry")}
                         </FormLabel>
-                        <FormDescription className='line-clamp-2 text-xs sm:line-clamp-none'>
+                        <FormDescription className="line-clamp-2 text-xs sm:line-clamp-none">
                           {t(
-                            'When enabled, if channels in the current group fail, it will try channels in the next group in order.'
+                            "When enabled, if channels in the current group fail, it will try channels in the next group in order.",
                           )}
                         </FormDescription>
                       </div>
@@ -408,55 +571,55 @@ export function ApiKeysMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='expired_time'
+                name="expired_time"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Expiration Time')}</FormLabel>
-                    <div className='grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center'>
+                    <FormLabel>{t("Expiration Time")}</FormLabel>
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                       <FormControl>
                         <DateTimePicker
                           value={field.value}
                           onChange={field.onChange}
-                          placeholder={t('Never expires')}
-                          className='min-w-0 [&_input[type=time]]:w-24 sm:[&_input[type=time]]:w-32'
+                          placeholder={t("Never expires")}
+                          className="min-w-0 [&_input[type=time]]:w-24 sm:[&_input[type=time]]:w-32"
                         />
                       </FormControl>
-                      <div className='grid grid-cols-4 gap-2 sm:flex'>
+                      <div className="grid grid-cols-4 gap-2 sm:flex">
                         <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          className='px-2 text-xs sm:px-3 sm:text-sm'
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="px-2 text-xs sm:px-3 sm:text-sm"
                           onClick={() => handleSetExpiry(0, 0, 0)}
                         >
-                          {t('Never')}
+                          {t("Never")}
                         </Button>
                         <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          className='px-2 text-xs sm:px-3 sm:text-sm'
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="px-2 text-xs sm:px-3 sm:text-sm"
                           onClick={() => handleSetExpiry(1, 0, 0)}
                         >
-                          {t('1 Month')}
+                          {t("1 Month")}
                         </Button>
                         <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          className='px-2 text-xs sm:px-3 sm:text-sm'
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="px-2 text-xs sm:px-3 sm:text-sm"
                           onClick={() => handleSetExpiry(0, 1, 0)}
                         >
-                          {t('1 Day')}
+                          {t("1 Day")}
                         </Button>
                         <Button
-                          type='button'
-                          variant='outline'
-                          size='sm'
-                          className='px-2 text-xs sm:px-3 sm:text-sm'
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="px-2 text-xs sm:px-3 sm:text-sm"
                           onClick={() => handleSetExpiry(0, 0, 1)}
                         >
-                          {t('1 Hour')}
+                          {t("1 Hour")}
                         </Button>
                       </div>
                     </div>
@@ -468,26 +631,26 @@ export function ApiKeysMutateDrawer({
               {!isUpdate && (
                 <FormField
                   control={form.control}
-                  name='tokenCount'
+                  name="tokenCount"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Quantity')}</FormLabel>
+                      <FormLabel>{t("Quantity")}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type='number'
-                          min='1'
-                          placeholder={t('Number of keys to create')}
+                          type="number"
+                          min="1"
+                          placeholder={t("Number of keys to create")}
                           onChange={(e) =>
                             field.onChange(
-                              Number.parseInt(e.target.value, 10) || 1
+                              Number.parseInt(e.target.value, 10) || 1,
                             )
                           }
                         />
                       </FormControl>
                       <FormDescription>
                         {t(
-                          'Create multiple API keys at once (random suffix will be added to names)'
+                          "Create multiple API keys at once (random suffix will be added to names)",
                         )}
                       </FormDescription>
                       <FormMessage />
@@ -499,29 +662,29 @@ export function ApiKeysMutateDrawer({
 
             <SideDrawerSection>
               <SideDrawerSectionHeader
-                title={t('Routing Settings')}
+                title={t("Routing Settings")}
                 description={t(
-                  'Control channel selection and failover for this key'
+                  "Control channel selection and failover for this key",
                 )}
-                icon={<Settings2 className='size-4' />}
-                iconTone='info'
+                icon={<Settings2 className="size-4" />}
+                iconTone="info"
               />
               <FormField
                 control={form.control}
-                name='route_mode'
+                name="route_mode"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Routing mode')}</FormLabel>
+                    <FormLabel>{t("Routing mode")}</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger className='w-full'>
+                        <SelectTrigger className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value='auto'>{t('Automatic')}</SelectItem>
-                        <SelectItem value='manual'>
-                          {t('Manual order')}
+                        <SelectItem value="auto">{t("Automatic")}</SelectItem>
+                        <SelectItem value="manual">
+                          {t("Manual order")}
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -529,29 +692,28 @@ export function ApiKeysMutateDrawer({
                   </FormItem>
                 )}
               />
-
-              {routeMode === 'auto' && (
+              {routeMode === "auto" && (
                 <FormField
                   control={form.control}
-                  name='auto_route_strategy'
+                  name="auto_route_strategy"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Automatic route strategy')}</FormLabel>
+                      <FormLabel>{t("Automatic route strategy")}</FormLabel>
                       <Select
                         value={field.value}
                         onValueChange={field.onChange}
                       >
                         <FormControl>
-                          <SelectTrigger className='w-full'>
+                          <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value='priority'>
-                            {t('Priority and weight')}
+                          <SelectItem value="priority">
+                            {t("Priority and weight")}
                           </SelectItem>
-                          <SelectItem value='price'>
-                            {t('Lowest group ratio')}
+                          <SelectItem value="price">
+                            {t("Lowest group ratio")}
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -560,49 +722,47 @@ export function ApiKeysMutateDrawer({
                   )}
                 />
               )}
-
               <FormField
                 control={form.control}
-                name='max_ratio'
+                name="max_ratio"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t('Maximum group ratio')}</FormLabel>
+                    <FormLabel>{t("Maximum group ratio")}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
-                        type='number'
-                        min='0'
-                        max='1000'
-                        step='0.01'
+                        type="number"
+                        min="0"
+                        max="1000"
+                        step="0.01"
                         onChange={(event) =>
                           field.onChange(
-                            Number.parseFloat(event.target.value) || 0
+                            Number.parseFloat(event.target.value) || 0,
                           )
                         }
                       />
                     </FormControl>
                     <FormDescription>
                       {t(
-                        'Set 0 for no ratio limit. Candidates above this ratio are skipped.'
+                        "Set 0 for no ratio limit. Candidates above this ratio are skipped.",
                       )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={form.control}
-                name='failover_enabled'
+                name="failover_enabled"
                 render={({ field }) => (
                   <FormItem className={sideDrawerSwitchItemClassName()}>
-                    <div className='flex flex-col gap-0.5'>
-                      <FormLabel className='text-sm'>
-                        {t('Enable failover')}
+                    <div className="flex flex-col gap-0.5">
+                      <FormLabel className="text-sm">
+                        {t("Enable failover")}
                       </FormLabel>
-                      <FormDescription className='text-xs'>
+                      <FormDescription className="text-xs">
                         {t(
-                          'Try the next eligible group or channel after a retryable upstream failure.'
+                          "Try the next eligible group or channel after a retryable upstream failure.",
                         )}
                       </FormDescription>
                     </div>
@@ -615,13 +775,12 @@ export function ApiKeysMutateDrawer({
                   </FormItem>
                 )}
               />
-
-              {routeMode === 'manual' && (
+              {routeMode === "manual" && (
                 <FormItem>
-                  <FormLabel>{t('Manual fallback order')}</FormLabel>
+                  <FormLabel>{t("Manual fallback order")}</FormLabel>
                   <FormDescription>
                     {t(
-                      'Candidates are tried from top to bottom. Disabled channels are skipped at request time.'
+                      "Candidates are tried from top to bottom. Disabled channels are skipped at request time.",
                     )}
                   </FormDescription>
                   <TokenRouteEditor
@@ -634,30 +793,29 @@ export function ApiKeysMutateDrawer({
                   {!isUpdate && (
                     <FormDescription>
                       {t(
-                        'Save the key first to choose fixed channels; group routes are available immediately.'
+                        "Save the key first to choose fixed channels; group routes are available immediately.",
                       )}
                     </FormDescription>
                   )}
                 </FormItem>
               )}
-
-              <div className='grid gap-3 sm:grid-cols-2'>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name='rate_limit'
+                  name="rate_limit"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Requests per window')}</FormLabel>
+                      <FormLabel>{t("Requests per window")}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type='number'
-                          min='0'
-                          max='1000000'
-                          step='1'
+                          type="number"
+                          min="0"
+                          max="1000000"
+                          step="1"
                           onChange={(event) =>
                             field.onChange(
-                              Number.parseInt(event.target.value, 10) || 0
+                              Number.parseInt(event.target.value, 10) || 0,
                             )
                           }
                         />
@@ -668,20 +826,20 @@ export function ApiKeysMutateDrawer({
                 />
                 <FormField
                   control={form.control}
-                  name='rate_limit_window_seconds'
+                  name="rate_limit_window_seconds"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('Window seconds')}</FormLabel>
+                      <FormLabel>{t("Window seconds")}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type='number'
-                          min='1'
-                          max='86400'
-                          step='1'
+                          type="number"
+                          min="1"
+                          max="86400"
+                          step="1"
                           onChange={(event) =>
                             field.onChange(
-                              Number.parseInt(event.target.value, 10) || 60
+                              Number.parseInt(event.target.value, 10) || 60,
                             )
                           }
                         />
@@ -695,35 +853,35 @@ export function ApiKeysMutateDrawer({
 
             <SideDrawerSection>
               <SideDrawerSectionHeader
-                title={t('Quota Settings')}
-                description={t('Set quota amount and limits')}
-                icon={<WalletCards className='size-4' />}
-                iconTone='success'
+                title={t("Quota Settings")}
+                description={t("Set quota amount and limits")}
+                icon={<WalletCards className="size-4" />}
+                iconTone="success"
               />
               {!unlimitedQuota && (
                 <FormField
                   control={form.control}
-                  name='remain_quota_dollars'
+                  name="remain_quota_dollars"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{quotaLabel}</FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          type='number'
+                          type="number"
                           step={tokensOnly ? 1 : 0.01}
                           placeholder={quotaPlaceholder}
                           onChange={(e) =>
                             field.onChange(
-                              Number.parseFloat(e.target.value) || 0
+                              Number.parseFloat(e.target.value) || 0,
                             )
                           }
                         />
                       </FormControl>
                       <FormDescription>
                         {tokensOnly
-                          ? t('Enter the quota amount in tokens')
-                          : t('Enter the quota amount in {{currency}}', {
+                          ? t("Enter the quota amount in tokens")
+                          : t("Enter the quota amount in {{currency}}", {
                               currency: currencyLabel,
                             })}
                       </FormDescription>
@@ -735,15 +893,15 @@ export function ApiKeysMutateDrawer({
 
               <FormField
                 control={form.control}
-                name='unlimited_quota'
+                name="unlimited_quota"
                 render={({ field }) => (
                   <FormItem className={sideDrawerSwitchItemClassName()}>
-                    <div className='flex flex-col gap-0.5'>
-                      <FormLabel className='text-sm'>
-                        {t('Unlimited Quota')}
+                    <div className="flex flex-col gap-0.5">
+                      <FormLabel className="text-sm">
+                        {t("Unlimited Quota")}
                       </FormLabel>
-                      <FormDescription className='text-xs'>
-                        {t('Enable unlimited quota for this API key')}
+                      <FormDescription className="text-xs">
+                        {t("Enable unlimited quota for this API key")}
                       </FormDescription>
                     </div>
                     <FormControl>
@@ -762,32 +920,32 @@ export function ApiKeysMutateDrawer({
                 <CollapsibleTrigger
                   render={
                     <button
-                      type='button'
-                      className='hover:bg-muted/40 flex w-full items-center gap-3 rounded-md py-1.5 text-left transition-colors'
+                      type="button"
+                      className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-md py-1.5 text-left transition-colors"
                     />
                   }
                 >
                   <SideDrawerSectionHeader
-                    className='flex-1'
-                    title={t('Advanced Settings')}
-                    description={t('Set API key access restrictions')}
-                    icon={<Settings2 className='size-4' />}
+                    className="flex-1"
+                    title={t("Advanced Settings")}
+                    description={t("Set API key access restrictions")}
+                    icon={<Settings2 className="size-4" />}
                   />
                   <ChevronDown
                     className={cn(
-                      'text-muted-foreground size-4 shrink-0 transition-transform',
-                      advancedOpen && 'rotate-180'
+                      "text-muted-foreground size-4 shrink-0 transition-transform",
+                      advancedOpen && "rotate-180",
                     )}
                   />
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <div className='flex flex-col gap-4 pt-2'>
+                  <div className="flex flex-col gap-4 pt-2">
                     <FormField
                       control={form.control}
-                      name='model_limits'
+                      name="model_limits"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{t('Model Limits')}</FormLabel>
+                          <FormLabel>{t("Model Limits")}</FormLabel>
                           <FormControl>
                             <MultiSelect
                               options={models.map((m) => ({
@@ -797,12 +955,12 @@ export function ApiKeysMutateDrawer({
                               selected={field.value}
                               onChange={field.onChange}
                               placeholder={t(
-                                'Select models (empty for allow all)'
+                                "Select models (empty for allow all)",
                               )}
                             />
                           </FormControl>
                           <FormDescription>
-                            {t('Limit which models can be used with this key')}
+                            {t("Limit which models can be used with this key")}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -811,25 +969,25 @@ export function ApiKeysMutateDrawer({
 
                     <FormField
                       control={form.control}
-                      name='allow_ips'
+                      name="allow_ips"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>
-                            {t('IP Whitelist (supports CIDR)')}
+                            {t("IP Whitelist (supports CIDR)")}
                           </FormLabel>
                           <FormControl>
                             <Textarea
                               {...field}
-                              className='min-h-20 resize-none'
+                              className="min-h-20 resize-none"
                               placeholder={t(
-                                'One IP per line (empty for no restriction)'
+                                "One IP per line (empty for no restriction)",
                               )}
                               rows={3}
                             />
                           </FormControl>
                           <FormDescription>
                             {t(
-                              'Do not over-trust this feature. IP may be spoofed. Please use with nginx, CDN and other gateways.'
+                              "Do not over-trust this feature. IP may be spoofed. Please use with nginx, CDN and other gateways.",
                             )}
                           </FormDescription>
                           <FormMessage />
@@ -844,20 +1002,20 @@ export function ApiKeysMutateDrawer({
         </Form>
         <SheetFooter className={sideDrawerFooterClassName()}>
           <SheetClose
-            render={<Button variant='outline' className='w-full sm:w-auto' />}
+            render={<Button variant="outline" className="w-full sm:w-auto" />}
           >
-            {t('Close')}
+            {t("Close")}
           </SheetClose>
           <Button
-            type='button'
+            type="button"
             onClick={form.handleSubmit(onSubmit, onInvalid)}
-            disabled={isSubmitting}
-            className='w-full sm:w-auto'
+            disabled={!isFormInitialized || isSubmitting}
+            className="w-full sm:w-auto"
           >
-            {isSubmitting ? t('Saving...') : t('Save changes')}
+            {isSubmitting ? t("Saving...") : t("Save changes")}
           </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  )
+  );
 }

@@ -27,6 +27,7 @@ const (
 	ContextKeyTokenRateLimitWindow   ContextKey = "token_rate_limit_window"
 	ContextKeyTokenRoutePlan         ContextKey = "token_route_plan"
 	ContextKeyTokenRoutingConfigured ContextKey = "token_routing_configured"
+	ContextKeyTokenAutoGroups        ContextKey = "token_auto_groups"
 
 	/* channel related keys */
 	ContextKeyChannelId                ContextKey = "channel_id"

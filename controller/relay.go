@@ -11,7 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
+	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
@@ -20,10 +20,11 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/samber/lo"
@@ -157,6 +158,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
 		return
 	}
+
 	// common.SetContextKey(c, constant.ContextKeyTokenCountMeta, meta)
 
 	if priceData.FreeModel {
@@ -197,14 +199,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
-		// Recalculate after every route selection; Reserve tops up before the upstream call,
-		// so the initial pre-consume only needs to cover the first selected group.
 		if routeBillingErr := refreshTokenRouteBilling(c, relayInfo, tokens, meta); routeBillingErr != nil {
 			newAPIError = routeBillingErr
 			break
 		}
-
 		addUsedChannel(c, channel.Id)
+		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
+		}
+
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
 			// Ensure consistent 413 for oversized bodies even when error occurs later (e.g., retry path)
@@ -235,7 +239,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
 		relayInfo.LastError = newAPIError
-		service.RecordTokenRouteFallback(c, newAPIError)
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), newAPIError)
 
@@ -257,7 +260,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 }
 
 func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
-	if !service.ShouldUseTokenRouting(c) {
+	if !service.ShouldUseTokenRouting(c) || relayInfo.TieredBillingSnapshot != nil {
 		return nil
 	}
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
@@ -274,64 +277,6 @@ func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, 
 		}
 	}
 	relayInfo.PriceData = priceData
-	return nil
-}
-
-func refreshTokenTaskRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
-	if !service.ShouldUseTokenRouting(c) {
-		return nil
-	}
-	groupRatioInfo := helper.HandleGroupRatio(c, relayInfo)
-	previousRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
-	if previousRatio == groupRatioInfo.GroupRatio && relayInfo.Billing != nil {
-		return nil
-	}
-	if previousRatio <= 0 {
-		if relayInfo.Billing != nil {
-			return types.NewError(fmt.Errorf("无法在分组倍率为零时重算任务额度"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
-		}
-		priceData, err := helper.ModelPriceHelperPerCall(c, relayInfo)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
-		}
-		for key, ratio := range relayInfo.PriceData.OtherRatios() {
-			priceData.AddOtherRatio(key, ratio)
-		}
-		quotaFloat := priceData.ApplyOtherRatiosToFloat(float64(priceData.Quota))
-		quota, clamp := common.QuotaFromFloatChecked(quotaFloat)
-		if clamp != nil {
-			relayInfo.QuotaClamp = clamp
-			return types.NewErrorWithStatusCode(clamp, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-		}
-		priceData.Quota = quota
-		priceData.GroupRatioInfo = groupRatioInfo
-		relayInfo.PriceData = priceData
-		relayInfo.ForcePreConsume = true
-		if apiErr := service.PreConsumeBilling(c, quota, relayInfo); apiErr != nil {
-			return apiErr
-		}
-		return nil
-	}
-	quotaFloat := float64(relayInfo.PriceData.Quota) / previousRatio * groupRatioInfo.GroupRatio
-	quota, clamp := common.QuotaFromFloatChecked(quotaFloat)
-	if clamp != nil {
-		relayInfo.QuotaClamp = clamp
-		return types.NewErrorWithStatusCode(clamp, types.ErrorCodeModelPriceError, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-	}
-	if relayInfo.Billing == nil {
-		relayInfo.PriceData.GroupRatioInfo = groupRatioInfo
-		relayInfo.PriceData.Quota = quota
-		relayInfo.ForcePreConsume = true
-		if apiErr := service.PreConsumeBilling(c, quota, relayInfo); apiErr != nil {
-			return apiErr
-		}
-		return nil
-	}
-	if err := relayInfo.Billing.Reserve(quota); err != nil {
-		return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
-	}
-	relayInfo.PriceData.GroupRatioInfo = groupRatioInfo
-	relayInfo.PriceData.Quota = quota
 	return nil
 }
 
@@ -407,15 +352,14 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return channel, nil
 	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
-
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-
 	if err != nil {
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 	if channel == nil {
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
+
+	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 
 	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 	if newAPIError != nil {
@@ -429,9 +373,6 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
-		return false
-	}
-	if service.ShouldSkipTokenRouteRetry(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
@@ -489,7 +430,6 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		other["channel_type"] = c.GetInt("channel_type")
 		adminInfo := make(map[string]interface{})
 		adminInfo["use_channel"] = c.GetStringSlice("use_channel")
-		service.AppendTokenRouteAdminInfo(c, adminInfo)
 		isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
 		if isMultiKey {
 			adminInfo["is_multi_key"] = true
@@ -519,7 +459,7 @@ func RelayMidjourney(c *gin.Context) {
 		return
 	}
 
-	var mjErr *dto.MidjourneyResponse
+	var mjErr *taskdto.MidjourneyResponse
 	switch relayInfo.RelayMode {
 	case relayconstant.RelayModeMidjourneyNotify:
 		mjErr = relay.RelayMidjourneyNotify(c)
@@ -577,7 +517,7 @@ func RelayNotFound(c *gin.Context) {
 func RelayTaskFetch(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
+		c.JSON(http.StatusInternalServerError, &taskdto.TaskError{
 			Code:       "gen_relay_info_failed",
 			Message:    err.Error(),
 			StatusCode: http.StatusInternalServerError,
@@ -592,7 +532,7 @@ func RelayTaskFetch(c *gin.Context) {
 func RelayTask(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, &dto.TaskError{
+		c.JSON(http.StatusInternalServerError, &taskdto.TaskError{
 			Code:       "gen_relay_info_failed",
 			Message:    err.Error(),
 			StatusCode: http.StatusInternalServerError,
@@ -606,7 +546,7 @@ func RelayTask(c *gin.Context) {
 	}
 
 	var result *relay.TaskSubmitResult
-	var taskErr *dto.TaskError
+	var taskErr *taskdto.TaskError
 	defer func() {
 		if taskErr != nil && relayInfo.Billing != nil {
 			relayInfo.Billing.Refund(c)
@@ -640,10 +580,6 @@ func RelayTask(c *gin.Context) {
 				taskErr = service.TaskErrorWrapperLocal(channelErr.Err, "get_channel_failed", http.StatusInternalServerError)
 				break
 			}
-		}
-		if routeBillingErr := refreshTokenTaskRouteBilling(c, relayInfo); routeBillingErr != nil {
-			taskErr = service.TaskErrorWrapperLocal(routeBillingErr.Err, "route_billing_failed", routeBillingErr.StatusCode)
-			break
 		}
 
 		addUsedChannel(c, channel.Id)
@@ -716,14 +652,14 @@ func RelayTask(c *gin.Context) {
 }
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
-func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
+func respondTaskError(c *gin.Context, taskErr *taskdto.TaskError) {
 	if taskErr.StatusCode == http.StatusTooManyRequests {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
 }
 
-func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {
+func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *taskdto.TaskError, retryTimes int) bool {
 	if taskErr == nil {
 		return false
 	}

@@ -34,7 +34,32 @@ type Token struct {
 	FailoverEnabled    bool           `json:"failover_enabled"`
 	RateLimit          int            `json:"rate_limit"`
 	RateLimitWindow    int            `json:"rate_limit_window_seconds"`
+	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
+}
+
+func (token *Token) GetAutoGroups() ([]string, error) {
+	if token.AutoGroups == "" {
+		return nil, nil
+	}
+	var groups []string
+	if err := common.UnmarshalJsonStr(token.AutoGroups, &groups); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+func (token *Token) SetAutoGroups(groups []string) error {
+	if len(groups) == 0 {
+		token.AutoGroups = ""
+		return nil
+	}
+	data, err := common.Marshal(groups)
+	if err != nil {
+		return err
+	}
+	token.AutoGroups = string(data)
+	return nil
 }
 
 func (token *Token) Clean() {
@@ -297,19 +322,17 @@ func (token *Token) Insert() error {
 
 // Update Make sure your token's fields is completed, because this will update non-zero values
 func (token *Token) Update() (err error) {
-	defer func() {
-		if shouldUpdateRedis(true, err) {
-			gopool.Go(func() {
-				err := cacheSetToken(*token)
-				if err != nil {
-					common.SysLog("failed to update token cache: " + err.Error())
-				}
-			})
-		}
-	}()
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
-		"route_mode", "auto_route_strategy", "max_ratio", "failover_enabled", "rate_limit", "rate_limit_window_seconds").Updates(token).Error
+		"route_mode", "auto_route_strategy", "max_ratio", "failover_enabled", "rate_limit", "rate_limit_window_seconds", "auto_groups").Updates(token).Error
+	if shouldUpdateRedis(true, err) {
+		if cacheErr := cacheSetToken(*token); cacheErr != nil {
+			common.SysLog("failed to update token cache: " + cacheErr.Error())
+			if deleteErr := cacheDeleteToken(token.Key); deleteErr != nil {
+				common.SysLog("failed to invalidate token cache after update: " + deleteErr.Error())
+			}
+		}
+	}
 	return err
 }
 
@@ -381,9 +404,6 @@ func DeleteTokenById(id int, userId int) (err error) {
 	token := Token{Id: id, UserId: userId}
 	err = DB.Where(token).First(&token).Error
 	if err != nil {
-		return err
-	}
-	if err = DeleteTokenRouteRules(token.Id); err != nil {
 		return err
 	}
 	return token.Delete()
@@ -471,10 +491,6 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	}
 
 	if err := tx.Where("user_id = ? AND id IN (?)", userId, ids).Delete(&Token{}).Error; err != nil {
-		tx.Rollback()
-		return 0, err
-	}
-	if err := tx.Where("token_id IN (?)", ids).Delete(&TokenRouteRule{}).Error; err != nil {
 		tx.Rollback()
 		return 0, err
 	}

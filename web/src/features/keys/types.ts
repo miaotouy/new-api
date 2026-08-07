@@ -34,6 +34,7 @@ export const apiKeySchema = z.object({
   created_time: z.number(),
   accessed_time: z.number(),
   group: z.string().nullish().default(''),
+  auto_groups: z.array(z.string()).nullish().default(null),
   cross_group_retry: z
     .preprocess((v) => {
       if (v === 1) return true
@@ -103,6 +104,7 @@ export interface ApiKeyFormData {
   model_limits: string
   allow_ips: string
   group: string
+  auto_groups: string[]
   cross_group_retry: boolean
   route_mode: 'auto' | 'manual'
   auto_route_strategy: 'priority' | 'price'
@@ -132,6 +134,11 @@ export type ApiKeyRouteOption = {
   weight: number
   response_time: number
   group_ratio: number
+}
+
+export interface TokenAutoGroupsConfig {
+  groups: string[]
+  max_count: number
 }
 
 // ============================================================================
