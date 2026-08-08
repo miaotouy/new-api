@@ -36,6 +36,7 @@ type DialogProps = React.ComponentProps<typeof DialogRoot> & {
   trigger?: React.ReactElement
   footer?: React.ReactNode
   contentHeight?: React.CSSProperties['height']
+  contentMaxHeightClassName?: string
   contentClassName?: string
   headerClassName?: string
   titleClassName?: string
@@ -56,6 +57,7 @@ export function Dialog({
   trigger,
   footer,
   contentHeight = 'auto',
+  contentMaxHeightClassName,
   contentClassName,
   headerClassName,
   titleClassName,
@@ -97,7 +99,8 @@ export function Dialog({
         <div
           className={cn(
             '-mx-1 min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain',
-            'h-[var(--dialog-content-height)] max-h-[calc(100vh-14rem)]'
+            'h-[var(--dialog-content-height)]',
+            contentMaxHeightClassName ?? 'max-h-[calc(100vh-14rem)]'
           )}
         >
           <div
