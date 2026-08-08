@@ -21,15 +21,12 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 import type { ApiKeyRouteOption, ApiKeyRouteRule } from '../types'
+import {
+  RouteSelectCombobox,
+  type RouteSelectOption,
+} from './route-select-combobox'
 
 type TokenRouteEditorProps = {
   groups: string[]
@@ -49,6 +46,25 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
     () => props.channels.filter((channel) => channel.status === 1),
     [props.channels]
   )
+
+  const kindOptions = useMemo<RouteSelectOption[]>(
+    () => [
+      { value: 'group', label: t('Group route') },
+      { value: 'channel', label: t('Channel route') },
+    ],
+    [t]
+  )
+
+  const candidateOptions = useMemo<RouteSelectOption[]>(() => {
+    if (kind === 'group') {
+      return props.groups.map((group) => ({ value: group, label: group }))
+    }
+
+    return availableChannels.map((channel) => ({
+      value: String(channel.id),
+      label: `${channel.name} · ${channel.group} · ×${channel.group_ratio} · #${channel.id}`,
+    }))
+  }, [availableChannels, kind, props.groups])
 
   const addItem = () => {
     if (!selectedValue) return
@@ -90,44 +106,26 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
   return (
     <div className='flex flex-col gap-3 rounded-lg border p-3'>
       <div className='flex flex-col gap-2 sm:flex-row'>
-        <Select
+        <RouteSelectCombobox
+          options={kindOptions}
           value={kind}
           onValueChange={(value) => {
             if (value !== 'group' && value !== 'channel') return
             setKind(value)
             setSelectedValue('')
           }}
-        >
-          <SelectTrigger className='w-full sm:w-32'>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent align='start' alignItemWithTrigger={false}>
-            <SelectItem value='group'>{t('Group route')}</SelectItem>
-            <SelectItem value='channel'>{t('Channel route')}</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
+          disabled={props.disabled}
+          className='w-full sm:w-32'
+        />
+        <RouteSelectCombobox
+          options={candidateOptions}
           value={selectedValue}
-          onValueChange={(value) => setSelectedValue(value ?? '')}
-        >
-          <SelectTrigger className='min-w-0 flex-1'>
-            <SelectValue placeholder={t('Select a route candidate')} />
-          </SelectTrigger>
-          <SelectContent align='start' alignItemWithTrigger={false}>
-            {kind === 'group'
-              ? props.groups.map((group) => (
-                  <SelectItem key={group} value={group}>
-                    {group}
-                  </SelectItem>
-                ))
-              : availableChannels.map((channel) => (
-                  <SelectItem key={channel.id} value={String(channel.id)}>
-                    {channel.name} · {channel.group} · ×{channel.group_ratio} ·
-                    #{channel.id}
-                  </SelectItem>
-                ))}
-          </SelectContent>
-        </Select>
+          onValueChange={setSelectedValue}
+          placeholder={t('Select a route candidate')}
+          searchable
+          disabled={props.disabled}
+          className='flex-1'
+        />
         <Button
           type='button'
           variant='outline'

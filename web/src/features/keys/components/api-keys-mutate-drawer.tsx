@@ -52,13 +52,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Sheet,
   SheetClose,
   SheetContent,
@@ -98,6 +91,10 @@ import {
 } from "./api-key-group-combobox";
 import { useApiKeys } from "./api-keys-provider";
 import { AutoGroupOrderEditor } from "./auto-group-order-editor";
+import {
+  RouteSelectCombobox,
+  type RouteSelectOption,
+} from "./route-select-combobox";
 import { TokenRouteEditor } from "./token-route-editor";
 
 type ApiKeyMutateDrawerProps = {
@@ -418,6 +415,20 @@ export function ApiKeysMutateDrawer({
     .map((group) => group.value)
     .filter((group) => group !== "auto");
   const routeOptions = routeOptionsData?.data ?? [];
+  const routeModeOptions = useMemo<RouteSelectOption[]>(
+    () => [
+      { value: "auto", label: t("Automatic") },
+      { value: "manual", label: t("Manual order") },
+    ],
+    [t],
+  );
+  const autoRouteStrategyOptions = useMemo<RouteSelectOption[]>(
+    () => [
+      { value: "priority", label: t("Priority and weight") },
+      { value: "price", label: t("Lowest group ratio") },
+    ],
+    [t],
+  );
 
   return (
     <Sheet
@@ -675,19 +686,14 @@ export function ApiKeysMutateDrawer({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>{t("Routing mode")}</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent align="start" alignItemWithTrigger={false}>
-                        <SelectItem value="auto">{t("Automatic")}</SelectItem>
-                        <SelectItem value="manual">
-                          {t("Manual order")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <RouteSelectCombobox
+                        options={routeModeOptions}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        className="w-full"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -699,24 +705,14 @@ export function ApiKeysMutateDrawer({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("Automatic route strategy")}</FormLabel>
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent align="start" alignItemWithTrigger={false}>
-                          <SelectItem value="priority">
-                            {t("Priority and weight")}
-                          </SelectItem>
-                          <SelectItem value="price">
-                            {t("Lowest group ratio")}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <RouteSelectCombobox
+                          options={autoRouteStrategyOptions}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
