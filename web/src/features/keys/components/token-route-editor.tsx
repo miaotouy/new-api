@@ -101,7 +101,7 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
           <SelectTrigger className='w-full sm:w-32'>
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align='start' alignItemWithTrigger={false}>
             <SelectItem value='group'>{t('Group route')}</SelectItem>
             <SelectItem value='channel'>{t('Channel route')}</SelectItem>
           </SelectContent>
@@ -113,7 +113,7 @@ export function TokenRouteEditor(props: TokenRouteEditorProps) {
           <SelectTrigger className='min-w-0 flex-1'>
             <SelectValue placeholder={t('Select a route candidate')} />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent align='start' alignItemWithTrigger={false}>
             {kind === 'group'
               ? props.groups.map((group) => (
                   <SelectItem key={group} value={group}>

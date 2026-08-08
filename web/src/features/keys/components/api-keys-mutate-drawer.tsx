@@ -681,7 +681,7 @@ export function ApiKeysMutateDrawer({
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
-                      <SelectContent>
+                      <SelectContent align="start" alignItemWithTrigger={false}>
                         <SelectItem value="auto">{t("Automatic")}</SelectItem>
                         <SelectItem value="manual">
                           {t("Manual order")}
@@ -708,7 +708,7 @@ export function ApiKeysMutateDrawer({
                             <SelectValue />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent align="start" alignItemWithTrigger={false}>
                           <SelectItem value="priority">
                             {t("Priority and weight")}
                           </SelectItem>
