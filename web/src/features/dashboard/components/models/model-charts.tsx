@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
@@ -68,6 +69,7 @@ export function ModelCharts(props: ModelChartsProps) {
     props.defaultChartTab ?? 'trend'
   )
   const [themeReady, setThemeReady] = useState(false)
+  const [resetVersion, setResetVersion] = useState(0)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -116,6 +118,7 @@ export function ModelCharts(props: ModelChartsProps) {
     props.data.length,
     resolvedTheme,
     customization.preset,
+    resetVersion,
   ].join('-')
 
   return (
@@ -133,21 +136,26 @@ export function ModelCharts(props: ModelChartsProps) {
           </span>
         </div>
 
-        <div className='bg-muted/60 inline-flex h-7 w-full overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:w-auto'>
-          {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
-            <button
-              key={tab.value}
-              type='button'
-              onClick={() => setActiveTab(tab.value)}
-              className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
-                activeTab === tab.value
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {t(tab.labelKey)}
-            </button>
-          ))}
+        <div className='flex w-full items-center gap-1.5 sm:w-auto'>
+          <div className='bg-muted/60 inline-flex h-7 min-w-0 flex-1 overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:flex-none'>
+            {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
+              <button
+                key={tab.value}
+                type='button'
+                onClick={() => setActiveTab(tab.value)}
+                className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
+                  activeTab === tab.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
+          <ChartResetButton
+            onClick={() => setResetVersion((value) => value + 1)}
+          />
         </div>
       </div>
 

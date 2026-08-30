@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
+import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import { getDashboardChartColors } from '@/features/dashboard/lib/charts'
 import type { TokenUsageDataItem } from '@/features/dashboard/types'
 import dayjs from '@/lib/dayjs'
@@ -199,6 +200,7 @@ export function TokenUsageChart({
     `${customization.preset}:${customization.radius}`
   )
   const [themeReady, setThemeReady] = useState(false)
+  const [resetVersion, setResetVersion] = useState(0)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -228,6 +230,7 @@ export function TokenUsageChart({
     timeGranularity,
     resolvedTheme,
     customization.preset,
+    resetVersion,
   ].join('-')
   const numberFormat = Intl.NumberFormat(undefined, {
     maximumFractionDigits: 0,
@@ -245,8 +248,13 @@ export function TokenUsageChart({
             {t('Total:')} {numberFormat.format(chartData.totalTokens)}
           </span>
         </div>
-        <div className='text-muted-foreground text-xs'>
-          {t('Cached:')} {numberFormat.format(chartData.totalCachedTokens)}
+        <div className='flex items-center gap-1.5'>
+          <div className='text-muted-foreground text-xs'>
+            {t('Cached:')} {numberFormat.format(chartData.totalCachedTokens)}
+          </div>
+          <ChartResetButton
+            onClick={() => setResetVersion((value) => value + 1)}
+          />
         </div>
       </div>
       <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>

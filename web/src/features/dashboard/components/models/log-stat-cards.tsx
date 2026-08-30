@@ -61,7 +61,7 @@ function formatStatNumber(value: number, locale: Intl.LocalesArgument) {
 }
 
 export function LogStatCards(props: LogStatCardsProps) {
-  const { i18n } = useTranslation()
+  const { i18n, t } = useTranslation()
   const statCardsConfig = useModelStatCardsConfig()
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
@@ -144,6 +144,17 @@ export function LogStatCards(props: LogStatCardsProps) {
     cachedTokens: stats?.cachedTokens ?? 0,
   }
 
+  const cacheHitRate =
+    adaptedStats.inputTokens > 0
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            (adaptedStats.cachedTokens / adaptedStats.inputTokens) * 100
+          )
+        )
+      : null
+
   const items = statCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
     const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
@@ -155,9 +166,6 @@ export function LogStatCards(props: LogStatCardsProps) {
         displayValue: formatQuota(rawValue),
         fullValue: formatQuota(rawValue),
       }
-    } else if (config.key === 'cacheHitRate') {
-      const value = `${rawValue.toFixed(1)}%`
-      formatted = { displayValue: value, fullValue: value }
     } else {
       formatted = formatStatNumber(rawValue, locale)
     }
@@ -169,12 +177,20 @@ export function LogStatCards(props: LogStatCardsProps) {
       desc: config.description,
       icon: config.icon,
       iconTone: config.iconTone,
+      cacheDetails:
+        config.key === 'tokens'
+          ? {
+              cachedTokens: formatStatNumber(adaptedStats.cachedTokens, locale),
+              cacheHitRate:
+                cacheHitRate === null ? '--' : `${cacheHitRate.toFixed(1)}%`,
+            }
+          : undefined,
     }
   })
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
+      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent
@@ -205,9 +221,20 @@ export function LogStatCards(props: LogStatCardsProps) {
                 >
                   {it.value}
                 </div>
-                <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
-                  {it.desc}
-                </div>
+                {it.cacheDetails ? (
+                  <div className='text-muted-foreground/60 mt-1 hidden flex-wrap gap-x-2 gap-y-0.5 text-xs md:flex'>
+                    <span title={it.cacheDetails.cachedTokens.fullValue}>
+                      {t('Cached:')} {it.cacheDetails.cachedTokens.displayValue}
+                    </span>
+                    <span>
+                      {t('Cache Hit Rate')}: {it.cacheDetails.cacheHitRate}
+                    </span>
+                  </div>
+                ) : (
+                  <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
+                    {it.desc}
+                  </div>
+                )}
               </>
             )
           }

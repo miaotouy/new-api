@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
+import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
@@ -75,6 +76,9 @@ export function UserCharts(props: UserChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const [themeReady, setThemeReady] = useState(false)
+  const [chartResetVersions, setChartResetVersions] = useState<
+    Record<string, number>
+  >({})
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -230,11 +234,25 @@ export function UserCharts(props: UserChartsProps) {
               key={chart.value}
               className='overflow-hidden rounded-lg border'
             >
-              <div className='flex w-full items-center gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
-                <IconBadge tone='info' size='sm'>
-                  <Users />
-                </IconBadge>
-                <div className='text-sm font-semibold'>{t(chart.labelKey)}</div>
+              <div className='flex w-full items-center justify-between gap-2 border-b px-3 py-2 sm:px-5 sm:py-3'>
+                <div className='flex min-w-0 items-center gap-2'>
+                  <IconBadge tone='info' size='sm'>
+                    <Users />
+                  </IconBadge>
+                  <div className='truncate text-sm font-semibold'>
+                    {t(chart.labelKey)}
+                  </div>
+                </div>
+                {chart.value === 'trend' && (
+                  <ChartResetButton
+                    onClick={() =>
+                      setChartResetVersions((versions) => ({
+                        ...versions,
+                        [chart.value]: (versions[chart.value] ?? 0) + 1,
+                      }))
+                    }
+                  />
+                )}
               </div>
 
               <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
@@ -244,7 +262,7 @@ export function UserCharts(props: UserChartsProps) {
                   themeReady &&
                   spec && (
                     <VChart
-                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}`}
+                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}-${chartResetVersions[chart.value] ?? 0}`}
                       spec={{
                         ...spec,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',

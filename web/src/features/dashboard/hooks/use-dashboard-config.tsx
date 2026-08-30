@@ -25,8 +25,6 @@ import {
   Flame,
   TrendingUp,
   Activity,
-  Database,
-  Percent,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -70,29 +68,6 @@ export function useModelStatCardsConfig(): StatCardConfig[] {
       icon: Layers,
       iconTone: 'chart-4',
       getValue: (stat) => stat?.tpm ?? 0,
-    },
-    {
-      key: 'cachedTokens',
-      title: t('Cached Tokens'),
-      description: t('Cached input tokens'),
-      icon: Database,
-      iconTone: 'chart-3',
-      getValue: (stat) => stat?.cachedTokens ?? 0,
-    },
-    {
-      key: 'cacheHitRate',
-      title: t('Cache Hit Rate'),
-      description: t('Cached tokens divided by input tokens'),
-      icon: Percent,
-      iconTone: 'warning',
-      getValue: (stat) => {
-        const inputTokens = stat?.inputTokens ?? 0
-        if (inputTokens <= 0) return null
-        return Math.min(
-          100,
-          Math.max(0, ((stat?.cachedTokens ?? 0) / inputTokens) * 100)
-        )
-      },
     },
     {
       key: 'avgRpm',
