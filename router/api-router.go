@@ -331,6 +331,11 @@ func SetApiRouter(router *gin.Engine) {
 		dataRoute.GET("/self", middleware.UserAuth(), controller.GetUserQuotaDates)
 		dataRoute.GET("/flow", middleware.AdminAuth(), controller.GetAllFlowQuotaDates)
 		dataRoute.GET("/flow/self", middleware.UserAuth(), controller.GetUserFlowQuotaDates)
+		dataRoute.GET("/tokens", middleware.AdminAuth(), controller.GetAllTokenUsageData)
+		dataRoute.GET("/tokens/self", middleware.UserAuth(), controller.GetUserTokenUsageData)
+		dataRoute.POST("/tokens/backfill", middleware.AdminAuth(), middleware.DisableCache(), controller.CreateTokenUsageBackfillTask)
+		dataRoute.GET("/tokens/backfill/latest", middleware.AdminAuth(), controller.GetLatestTokenUsageBackfillTask)
+		dataRoute.GET("/tokens/backfill/:task_id", middleware.AdminAuth(), controller.GetTokenUsageBackfillTask)
 
 		logRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

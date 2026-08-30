@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
+  TokenUsageDataItem,
   UptimeGroupResult,
 } from './types'
 
@@ -88,6 +89,22 @@ export async function getFlowQuotaDates(
 export async function getUptimeStatus() {
   const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(
     '/api/uptime/status'
+  )
+  return res.data
+}
+
+export async function getTokenUsageData(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    username?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin ? '/api/data/tokens' : '/api/data/tokens/self'
+  const res = await api.get<{ success: boolean; data: TokenUsageDataItem[] }>(
+    endpoint,
+    { params }
   )
   return res.data
 }

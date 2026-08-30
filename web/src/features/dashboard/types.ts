@@ -33,6 +33,17 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface TokenUsageDataItem {
+  user_id?: number
+  username?: string
+  model_name?: string
+  created_at: number
+  input_tokens: number
+  output_tokens: number
+  cached_tokens: number
+  token_used: number
+}
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string
@@ -55,12 +66,7 @@ export type FlowOverflowMode = 'aggregate' | 'hide'
 export type FlowRole = 'user' | 'admin' | 'root'
 
 export type FlowNodeKind =
-  | 'user'
-  | 'node'
-  | 'token'
-  | 'group'
-  | 'model'
-  | 'channel'
+  'user' | 'node' | 'token' | 'group' | 'model' | 'channel'
 
 export interface FlowNodeFilter {
   kind: FlowNodeKind

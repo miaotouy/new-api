@@ -344,6 +344,7 @@ type RecordConsumeLogParams struct {
 	ChannelId        int                    `json:"channel_id"`
 	PromptTokens     int                    `json:"prompt_tokens"`
 	CompletionTokens int                    `json:"completion_tokens"`
+	CachedTokens     int                    `json:"cached_tokens"`
 	ModelName        string                 `json:"model_name"`
 	TokenName        string                 `json:"token_name"`
 	Quota            int                    `json:"quota"`
@@ -414,6 +415,15 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			TokenID:   params.TokenId,
 			ChannelID: params.ChannelId,
 			NodeName:  common.NodeName,
+		})
+		LogTokenUsageData(TokenUsageDataLogParams{
+			UserID:       userId,
+			Username:     username,
+			ModelName:    params.ModelName,
+			CreatedAt:    createdAt,
+			InputTokens:  params.PromptTokens,
+			OutputTokens: params.CompletionTokens,
+			CachedTokens: params.CachedTokens,
 		})
 	}
 }

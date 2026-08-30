@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getUserQuotaDates } from '@/features/dashboard/api'
+import { getTokenUsageData, getUserQuotaDates } from '@/features/dashboard/api'
 import { useModelStatCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import {
   buildQueryParams,
@@ -30,6 +30,7 @@ import {
 } from '@/features/dashboard/lib'
 import type {
   QuotaDataItem,
+  TokenUsageDataItem,
   DashboardFilters,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
@@ -41,6 +42,7 @@ import { useAuthStore } from '@/stores/auth-store'
 interface LogStatCardsProps {
   filters?: DashboardFilters
   onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
+  onTokenDataUpdate?: (data: TokenUsageDataItem[], loading: boolean) => void
 }
 
 const MAX_INLINE_STAT_CHARS = 9
@@ -67,13 +69,15 @@ export function LogStatCards(props: LogStatCardsProps) {
     totalQuota: number
     totalCount: number
     totalTokens: number
+    inputTokens: number
+    cachedTokens: number
   } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
   const [timeRangeMinutes, setTimeRangeMinutes] = useState(0)
 
-  const { filters, onDataUpdate } = props
+  const { filters, onDataUpdate, onTokenDataUpdate } = props
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -82,6 +86,7 @@ export function LogStatCards(props: LogStatCardsProps) {
 
     setError(false)
     onDataUpdate?.([], true)
+    onTokenDataUpdate?.([], true)
 
     const timeRange = computeTimeRange(
       getDefaultDays(filters?.time_granularity),
@@ -91,18 +96,34 @@ export function LogStatCards(props: LogStatCardsProps) {
     const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
     setTimeRangeMinutes(timeDiff)
 
-    void getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
-      .then((res) => {
+    const queryParams = buildQueryParams(timeRange, filters)
+    void Promise.all([
+      getUserQuotaDates(queryParams, isAdmin),
+      getTokenUsageData(queryParams, isAdmin),
+    ])
+      .then(([quotaRes, tokenRes]) => {
         if (abortController.signal.aborted) return
-        const data = res?.data || []
-        setStats(calculateDashboardStats(data))
-        onDataUpdate?.(data, false)
+        const quotaData = quotaRes?.data || []
+        const tokenData = tokenRes?.data || []
+        const quotaStats = calculateDashboardStats(quotaData)
+        const inputTokens = tokenData.reduce(
+          (total, item) => total + (Number(item.input_tokens) || 0),
+          0
+        )
+        const cachedTokens = tokenData.reduce(
+          (total, item) => total + (Number(item.cached_tokens) || 0),
+          0
+        )
+        setStats({ ...quotaStats, inputTokens, cachedTokens })
+        onDataUpdate?.(quotaData, false)
+        onTokenDataUpdate?.(tokenData, false)
       })
       .catch(() => {
         if (abortController.signal.aborted) return
         setStats(null)
         setError(true)
         onDataUpdate?.([], false)
+        onTokenDataUpdate?.([], false)
       })
       .finally(() => {
         if (!abortController.signal.aborted) {
@@ -113,24 +134,33 @@ export function LogStatCards(props: LogStatCardsProps) {
     return () => {
       abortController.abort()
     }
-  }, [filters, isAdmin, onDataUpdate])
+  }, [filters, isAdmin, onDataUpdate, onTokenDataUpdate])
 
   const adaptedStats = {
     rpm: stats?.totalCount ?? 0,
     quota: stats?.totalQuota ?? 0,
     tpm: stats?.totalTokens ?? 0,
+    inputTokens: stats?.inputTokens ?? 0,
+    cachedTokens: stats?.cachedTokens ?? 0,
   }
 
   const items = statCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
     const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-    const formatted =
-      config.key === 'quota'
-        ? {
-            displayValue: formatQuota(rawValue),
-            fullValue: formatQuota(rawValue),
-          }
-        : formatStatNumber(rawValue, locale)
+    let formatted: { displayValue: string; fullValue: string }
+    if (rawValue === null) {
+      formatted = { displayValue: '--', fullValue: '--' }
+    } else if (config.key === 'quota') {
+      formatted = {
+        displayValue: formatQuota(rawValue),
+        fullValue: formatQuota(rawValue),
+      }
+    } else if (config.key === 'cacheHitRate') {
+      const value = `${rawValue.toFixed(1)}%`
+      formatted = { displayValue: value, fullValue: value }
+    } else {
+      formatted = formatStatNumber(rawValue, locale)
+    }
 
     return {
       title: config.title,
@@ -144,7 +174,7 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

@@ -22,6 +22,24 @@ func RegisterScheduledSystemTasks() {
 	service.RegisterSystemTaskHandler(modelUpdateHandler{})
 	service.RegisterSystemTaskHandler(midjourneyPollHandler{})
 	service.RegisterSystemTaskHandler(asyncTaskPollHandler{})
+	service.RegisterSystemTaskHandler(tokenUsageBackfillHandler{})
+}
+
+// tokenUsageBackfillHandler rebuilds the recent hourly token metrics from
+// existing consume logs. It is intentionally non-scheduled and is triggered
+// from the Data Dashboard settings page.
+type tokenUsageBackfillHandler struct{}
+
+func (tokenUsageBackfillHandler) Type() string { return model.SystemTaskTypeTokenUsageBackfill }
+
+func (tokenUsageBackfillHandler) Run(ctx context.Context, task *model.SystemTask, runnerID string) {
+	result, err := service.RunTokenUsageBackfill(ctx, task, service.NewSystemTaskProgressReporter(task, runnerID))
+	finishSystemTaskHandler(task, runnerID, func() model.SystemTaskStatus {
+		if err != nil {
+			return model.SystemTaskStatusFailed
+		}
+		return model.SystemTaskStatusSucceeded
+	}(), result, err)
 }
 
 // channelTestHandler runs the scheduled "test all channels" job. Enablement and

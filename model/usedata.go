@@ -121,6 +121,9 @@ func SaveQuotaDataCache() {
 		}
 	}
 	CacheQuotaData = make(map[string]*QuotaData)
+	if err := FlushTokenUsageDataCache(); err != nil {
+		common.SysError(fmt.Sprintf("保存 Token 看板数据失败: %v", err))
+	}
 	common.SysLog(fmt.Sprintf("保存数据看板数据成功，共保存%d条数据", size))
 }
 

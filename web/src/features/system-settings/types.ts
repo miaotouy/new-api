@@ -94,6 +94,32 @@ export type LogCleanupTask = SystemTask<
   LogCleanupTaskResult
 >
 
+export type TokenUsageBackfillTaskPayload = {
+  start_timestamp: number
+  end_timestamp: number
+}
+
+export type TokenUsageBackfillTaskState = {
+  total: number
+  processed: number
+  progress: number
+}
+
+export type TokenUsageBackfillTaskResult = {
+  start_timestamp: number
+  end_timestamp: number
+  scanned_logs: number
+  logs_with_cache_tokens: number
+  written_buckets: number
+  cached_tokens: number
+}
+
+export type TokenUsageBackfillTask = SystemTask<
+  TokenUsageBackfillTaskPayload,
+  TokenUsageBackfillTaskState,
+  TokenUsageBackfillTaskResult
+>
+
 export type SystemTaskResponse<TTask = SystemTask | null> = {
   success: boolean
   message: string
@@ -238,9 +264,7 @@ export type ModelSettings = {
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_concurrency': number
   'monitor_setting.channel_test_mode':
-    | 'scheduled_all'
-    | 'auto_ban_only'
-    | 'passive_recovery'
+    'scheduled_all' | 'auto_ban_only' | 'passive_recovery'
   'channel_affinity_setting.enabled': boolean
   'channel_affinity_setting.switch_on_success': boolean
   'channel_affinity_setting.keep_on_channel_disabled': boolean

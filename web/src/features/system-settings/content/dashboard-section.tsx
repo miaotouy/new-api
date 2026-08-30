@@ -49,6 +49,7 @@ import {
 } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
+import { TokenUsageBackfillSection } from './token-usage-backfill-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { safeNumberFieldProps } from '../utils/numeric-field'
 
@@ -97,100 +98,103 @@ export function DashboardSection({ defaultValues }: DashboardSectionProps) {
   const isEnabled = form.watch('DataExportEnabled')
 
   return (
-    <SettingsSection title={t('Data Dashboard')}>
-      <Form {...form}>
-        <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
-          <SettingsPageFormActions
-            onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending}
-          />
-          <FormField
-            control={form.control}
-            name='DataExportEnabled'
-            render={({ field }) => (
-              <SettingsSwitchItem>
-                <SettingsSwitchContent>
-                  <FormLabel>{t('Enable Data Dashboard')}</FormLabel>
-                </SettingsSwitchContent>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </SettingsSwitchItem>
-            )}
-          />
-
-          <div className='grid gap-6 sm:grid-cols-2'>
+    <>
+      <SettingsSection title={t('Data Dashboard')}>
+        <Form {...form}>
+          <SettingsForm onSubmit={form.handleSubmit(onSubmit)}>
+            <SettingsPageFormActions
+              onSave={form.handleSubmit(onSubmit)}
+              isSaving={updateOption.isPending}
+            />
             <FormField
               control={form.control}
-              name='DataExportInterval'
+              name='DataExportEnabled'
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Refresh interval (minutes)')}</FormLabel>
+                <SettingsSwitchItem>
+                  <SettingsSwitchContent>
+                    <FormLabel>{t('Enable Data Dashboard')}</FormLabel>
+                  </SettingsSwitchContent>
                   <FormControl>
-                    <Input
-                      type='number'
-                      min={1}
-                      max={1440}
-                      step={1}
-                      {...safeNumberFieldProps(field)}
-                      disabled={!isEnabled}
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
                     />
                   </FormControl>
-                  <FormDescription>
-                    {t('Keep this above 1 minute to avoid heavy database load')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+                </SettingsSwitchItem>
               )}
             />
 
-            <FormField
-              control={form.control}
-              name='DataExportDefaultTime'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Default time granularity')}</FormLabel>
-                  <Select
-                    items={[
-                      ...granularityOptions.map((option) => ({
+            <div className='grid gap-6 sm:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='DataExportInterval'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Refresh interval (minutes)')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={1440}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                        disabled={!isEnabled}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t(
+                        'Keep this above 1 minute to avoid heavy database load'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='DataExportDefaultTime'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Default time granularity')}</FormLabel>
+                    <Select
+                      items={granularityOptions.map((option) => ({
                         value: option.value,
                         label: t(option.label),
-                      })),
-                    ]}
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={!isEnabled}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder={t('Select granularity')} />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent alignItemWithTrigger={false}>
-                      <SelectGroup>
-                        {granularityOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {t(option.label)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {t(
-                      'UI granularity only &mdash; data is still aggregated hourly'
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        </SettingsForm>
-      </Form>
-    </SettingsSection>
+                      }))}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={!isEnabled}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={t('Select granularity')} />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectGroup>
+                          {granularityOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {t(option.label)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {t(
+                        'UI granularity only &mdash; data is still aggregated hourly'
+                      )}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </SettingsForm>
+        </Form>
+      </SettingsSection>
+      <TokenUsageBackfillSection />
+    </>
   )
 }

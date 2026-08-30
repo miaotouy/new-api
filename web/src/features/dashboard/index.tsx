@@ -55,6 +55,7 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
   QuotaDataItem,
+  TokenUsageDataItem,
   UserChartsFilters,
 } from './types'
 
@@ -66,6 +67,8 @@ const LOG_STAT_CARD_FALLBACK_KEYS = [
   'tokens',
   'average-rpm',
   'average-tpm',
+  'cached-tokens',
+  'cache-hit-rate',
 ] as const
 const PERFORMANCE_METRIC_FALLBACK_KEYS = [
   'success-rate',
@@ -80,6 +83,12 @@ const PERFORMANCE_MODEL_FALLBACK_KEYS = [
 const LazyLogStatCards = lazy(() =>
   import('./components/models/log-stat-cards').then((m) => ({
     default: m.LogStatCards,
+  }))
+)
+
+const LazyTokenUsageChart = lazy(() =>
+  import('./components/models/token-usage-chart').then((m) => ({
+    default: m.TokenUsageChart,
   }))
 )
 
@@ -116,7 +125,7 @@ const LazyFlowCharts = lazy(() =>
 function LogStatCardsFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-5'>
+      <div className='divide-border/60 grid grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
         {LOG_STAT_CARD_FALLBACK_KEYS.map((key, index) => (
           <div
             key={key}
@@ -200,7 +209,9 @@ export function Dashboard() {
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
+  const [tokenData, setTokenData] = useState<TokenUsageDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
+  const [tokenDataLoading, setTokenDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
@@ -230,6 +241,14 @@ export function Dashboard() {
     (data: QuotaDataItem[], loading: boolean) => {
       setModelData(data)
       setDataLoading(loading)
+    },
+    []
+  )
+
+  const handleTokenDataUpdate = useCallback(
+    (data: TokenUsageDataItem[], loading: boolean) => {
+      setTokenData(data)
+      setTokenDataLoading(loading)
     },
     []
   )
@@ -352,6 +371,7 @@ export function Dashboard() {
                   <LazyLogStatCards
                     filters={modelFilters}
                     onDataUpdate={handleDataUpdate}
+                    onTokenDataUpdate={handleTokenDataUpdate}
                   />
                 </Suspense>
               </FadeIn>
@@ -363,6 +383,17 @@ export function Dashboard() {
                 </FadeIn>
               )}
               <FadeIn delay={0.1}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyTokenUsageChart
+                    data={tokenData}
+                    loading={tokenDataLoading}
+                    timeGranularity={
+                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
+                    }
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyConsumptionDistributionChart
                     data={modelData}
@@ -376,7 +407,7 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
-              <FadeIn delay={0.15}>
+              <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyModelCharts
                     data={modelData}
