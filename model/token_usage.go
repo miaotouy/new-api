@@ -144,6 +144,15 @@ func upsertTokenUsageData(data *TokenUsageData) error {
 	}).Error
 }
 
+func AddTokenUsageData(data *TokenUsageData) error {
+	return upsertTokenUsageData(data)
+}
+
+func ClearTokenUsageData(startTime, endTime int64) error {
+	return DB.Where("created_at >= ? AND created_at <= ?", startTime, endTime).
+		Delete(&TokenUsageData{}).Error
+}
+
 func SetTokenUsageData(data *TokenUsageData) error {
 	var existing TokenUsageData
 	err := DB.Where("user_id = ? AND username = ? AND model_name = ? AND created_at = ?",

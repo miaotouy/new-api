@@ -55,11 +55,13 @@ func RunTokenUsageBackfill(ctx context.Context, task *model.SystemTask, reporter
 	if err != nil {
 		return TokenUsageBackfillResult{}, err
 	}
+	if err := model.ClearTokenUsageData(payload.StartTimestamp, payload.EndTimestamp); err != nil {
+		return TokenUsageBackfillResult{}, err
+	}
 	result := TokenUsageBackfillResult{
 		StartTimestamp: payload.StartTimestamp,
 		EndTimestamp:   payload.EndTimestamp,
 	}
-	buckets := make(map[string]*model.TokenUsageData)
 	cursor := model.TokenUsageLogCursor{}
 	processed := int64(0)
 	reporter(0, safeProgressTotal(total))
@@ -76,6 +78,7 @@ func RunTokenUsageBackfill(ctx context.Context, task *model.SystemTask, reporter
 		if len(logs) == 0 {
 			break
 		}
+		buckets := make(map[string]*model.TokenUsageData)
 		for _, log := range logs {
 			processed++
 			result.ScannedLogs++
@@ -103,22 +106,20 @@ func RunTokenUsageBackfill(ctx context.Context, task *model.SystemTask, reporter
 				buckets[key] = data
 			}
 		}
-		reporter(int(processed), safeProgressTotal(total))
+		for _, data := range buckets {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			if err := model.AddTokenUsageData(data); err != nil {
+				return result, err
+			}
+			result.WrittenBuckets++
+		}
+		reporter(safeInt(processed), safeProgressTotal(total))
 		if len(logs) < tokenUsageBackfillBatch {
 			break
 		}
 	}
-
-	for _, data := range buckets {
-		if err := ctx.Err(); err != nil {
-			return result, err
-		}
-		if err := model.SetTokenUsageData(data); err != nil {
-			return result, err
-		}
-		result.WrittenBuckets++
-	}
-	reporter(safeInt(processed), safeProgressTotal(total))
 	return result, nil
 }
 

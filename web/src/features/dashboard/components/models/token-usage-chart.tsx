@@ -42,6 +42,7 @@ type TokenUsageChartProps = {
 }
 
 type TokenPoint = {
+  Timestamp: number
   Time: string
   Metric: string
   Tokens: number
@@ -90,6 +91,7 @@ function buildTokenChartData(
     const time = formatChartTime(bucketTimestamp, timeGranularity)
     values.push(
       {
+        Timestamp: bucketTimestamp,
         Time: time,
         Metric: inputLabel,
         Tokens: bucket.input,
@@ -97,6 +99,7 @@ function buildTokenChartData(
         CachedTokens: bucket.cached,
       },
       {
+        Timestamp: bucketTimestamp,
         Time: time,
         Metric: outputLabel,
         Tokens: bucket.output,
@@ -104,6 +107,7 @@ function buildTokenChartData(
         CachedTokens: bucket.cached,
       },
       {
+        Timestamp: bucketTimestamp,
         Time: time,
         Metric: cachedLabel,
         Tokens: bucket.cached,
@@ -114,7 +118,7 @@ function buildTokenChartData(
     totalTokens += bucket.input + bucket.output
     totalCachedTokens += bucket.cached
   }
-  values.sort((a, b) => a.Time.localeCompare(b.Time))
+  values.sort((a, b) => a.Timestamp - b.Timestamp)
 
   const format = (value: number) =>
     Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
@@ -133,9 +137,14 @@ function buildTokenChartData(
       line: { style: { lineWidth: 2, cornerRadius: radius } },
       legends: { visible: true, selectMode: 'single' },
       color: colors,
-      axes: {
-        y: { label: { formatMethod: (value: number) => format(value) } },
-      },
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        {
+          orient: 'left',
+          type: 'linear',
+          label: { formatMethod: (value: number) => format(value) },
+        },
+      ],
       tooltip: {
         dimension: {
           content: [

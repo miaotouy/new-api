@@ -47,7 +47,7 @@ func TestRunTokenUsageBackfillIsIdempotent(t *testing.T) {
 	db := newTokenUsageBackfillTestDB(t)
 	model.DB, model.LOG_DB = db, db
 
-	start := int64(1_700_000_000)
+	start := int64(1_700_000_000 / 3600 * 3600)
 	require.NoError(t, db.Create(&model.Log{
 		UserId: 1, Username: "alice", ModelName: "model-a", Type: model.LogTypeConsume,
 		CreatedAt: start + 100, PromptTokens: 100, CompletionTokens: 25,
@@ -60,7 +60,7 @@ func TestRunTokenUsageBackfillIsIdempotent(t *testing.T) {
 	}).Error)
 
 	task, err := model.CreateSystemTask(model.SystemTaskTypeTokenUsageBackfill,
-		TokenUsageBackfillPayload{StartTimestamp: start, EndTimestamp: start + 3600}, nil)
+		TokenUsageBackfillPayload{StartTimestamp: start, EndTimestamp: start + 3599}, nil)
 	require.NoError(t, err)
 	reporter := func(processed, total int) {}
 	first, err := RunTokenUsageBackfill(context.Background(), task, reporter)
@@ -78,6 +78,36 @@ func TestRunTokenUsageBackfillIsIdempotent(t *testing.T) {
 	require.Equal(t, 150, stored.InputTokens)
 	require.Equal(t, 35, stored.OutputTokens)
 	require.Equal(t, 40, stored.CachedTokens)
+}
+
+func TestRunTokenUsageBackfillAggregatesAcrossBatches(t *testing.T) {
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLogDB })
+	db := newTokenUsageBackfillTestDB(t)
+	model.DB, model.LOG_DB = db, db
+
+	start := int64(1_700_000_000 / 3600 * 3600)
+	for range tokenUsageBackfillBatch + 1 {
+		require.NoError(t, db.Create(&model.Log{
+			UserId: 1, Username: "alice", ModelName: "model-a", Type: model.LogTypeConsume,
+			CreatedAt: start + 100, PromptTokens: 1, CompletionTokens: 2,
+			Other: `{"cache_tokens":1}`,
+		}).Error)
+	}
+
+	task, err := model.CreateSystemTask(model.SystemTaskTypeTokenUsageBackfill,
+		TokenUsageBackfillPayload{StartTimestamp: start, EndTimestamp: start + 3599}, nil)
+	require.NoError(t, err)
+
+	result, err := RunTokenUsageBackfill(context.Background(), task, func(processed, total int) {})
+	require.NoError(t, err)
+	require.Equal(t, int64(tokenUsageBackfillBatch+1), result.ScannedLogs)
+
+	var stored model.TokenUsageData
+	require.NoError(t, db.First(&stored).Error)
+	require.Equal(t, tokenUsageBackfillBatch+1, stored.InputTokens)
+	require.Equal(t, (tokenUsageBackfillBatch+1)*2, stored.OutputTokens)
+	require.Equal(t, tokenUsageBackfillBatch+1, stored.CachedTokens)
 }
 
 func TestStartTokenUsageBackfillTaskUsesCompletedHoursOnly(t *testing.T) {
