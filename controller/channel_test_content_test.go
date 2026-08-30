@@ -8,7 +8,6 @@ import (
 	hostdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ func TestResolveChannelTestEndpoint(t *testing.T) {
 		{name: "embedding", modelName: "text-embedding-3-small", expected: constant.EndpointTypeEmbeddings},
 		{name: "volc seedream", channel: &model.Channel{Type: constant.ChannelTypeVolcEngine}, modelName: "doubao-seedream-4", expected: constant.EndpointTypeImageGeneration},
 		{name: "codex channel", channel: &model.Channel{Type: constant.ChannelTypeCodex}, modelName: "gpt-5", expected: constant.EndpointTypeOpenAIResponse},
-		{name: "compact takes precedence", channel: &model.Channel{Type: constant.ChannelTypeCodex}, modelName: "gpt-5" + ratio_setting.CompactModelSuffix, expected: constant.EndpointTypeOpenAIResponseCompact},
+		{name: "explicit compact endpoint", channel: &model.Channel{Type: constant.ChannelTypeCodex}, modelName: "gpt-5", requested: string(constant.EndpointTypeOpenAIResponseCompact), expected: constant.EndpointTypeOpenAIResponseCompact},
 	}
 
 	for _, testCase := range testCases {

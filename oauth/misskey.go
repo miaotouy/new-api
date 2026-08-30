@@ -187,6 +187,11 @@ func (p *MisskeyProvider) GetProviderPrefix() string {
 	return "misskey_"
 }
 
+// ProviderUserIDColumn returns the users-table column storing this provider's user ID.
+func (p *MisskeyProvider) ProviderUserIDColumn() string {
+	return "misskey_id"
+}
+
 // GetAuthorizeURL generates the Misskey MiAuth authorization URL
 // This is called before the OAuth redirect to generate the proper MiAuth URL
 func (p *MisskeyProvider) GetAuthorizeURL(ctx context.Context, c *gin.Context) (string, error) {

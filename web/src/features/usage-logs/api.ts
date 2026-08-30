@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { api, type ApiRequestConfig } from '@/lib/api'
 
-import { buildQueryParams } from './lib/query'
+import { buildQueryParams } from './lib/query-params'
+import { parseTaskArtifactsResponse } from './lib/task-artifacts'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -26,6 +27,7 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  TaskArtifactsResponse,
   UserInfo,
   CreateLogExportRequest,
   LogExportTask,
@@ -162,4 +164,17 @@ export async function downloadLogExport(task: LogExportTask): Promise<void> {
   anchor.click()
   anchor.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const taskArtifactRequestConfig = {
+  skipBusinessError: true,
+  skipErrorHandler: true,
+} satisfies ApiRequestConfig
+
+export async function getTaskArtifacts(taskId: string) {
+  const response = await api.get<TaskArtifactsResponse>(
+    `/api/task/${encodeURIComponent(taskId)}/artifacts`,
+    taskArtifactRequestConfig
+  )
+  return parseTaskArtifactsResponse(response.data)
 }
