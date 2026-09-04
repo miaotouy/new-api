@@ -61,6 +61,17 @@ export const MODEL_ANALYTICS_CHART_OPTIONS = [
   { value: 'top', labelKey: 'Call Count Ranking' },
 ] as const
 
+export const DASHBOARD_METRIC_OPTIONS = [
+  { value: 'quota', labelKey: 'By quota' },
+  { value: 'tokens', labelKey: 'By tokens' },
+] as const
+
+export const MODEL_ANALYTICS_METRIC_OPTIONS = [
+  { value: 'requests', labelKey: 'By requests' },
+  { value: 'quota', labelKey: 'By quota' },
+  { value: 'tokens', labelKey: 'By tokens' },
+] as const
+
 export const EMPTY_DASHBOARD_FILTERS: DashboardFilters = {
   start_timestamp: undefined,
   end_timestamp: undefined,

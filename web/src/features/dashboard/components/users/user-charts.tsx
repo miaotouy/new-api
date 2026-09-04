@@ -29,6 +29,7 @@ import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import {
+  DASHBOARD_METRIC_OPTIONS,
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
@@ -38,6 +39,7 @@ import {
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type {
+  DashboardMetric,
   ProcessedUserChartData,
   UserChartsFilters,
 } from '@/features/dashboard/types'
@@ -88,6 +90,7 @@ export function UserCharts(props: UserChartsProps) {
   const timeGranularity = props.filters.timeGranularity
   const selectedRange = props.filters.selectedRange
   const topUserLimit = props.filters.topUserLimit
+  const metric = props.filters.metric
   const onFiltersChange = props.onFiltersChange
 
   const timeRange = useMemo(() => {
@@ -124,6 +127,13 @@ export function UserCharts(props: UserChartsProps) {
     [onFiltersChange, props.filters]
   )
 
+  const handleMetricChange = useCallback(
+    (nextMetric: DashboardMetric) => {
+      onFiltersChange({ ...props.filters, metric: nextMetric })
+    },
+    [onFiltersChange, props.filters]
+  )
+
   useEffect(() => {
     const updateTheme = async () => {
       setThemeReady(false)
@@ -153,9 +163,10 @@ export function UserCharts(props: UserChartsProps) {
         isLoading ? [] : (userData ?? []),
         timeGranularity,
         t,
-        topUserLimit
+        topUserLimit,
+        metric
       ),
-    [userData, isLoading, timeGranularity, t, topUserLimit]
+    [userData, isLoading, timeGranularity, t, topUserLimit, metric]
   )
 
   return (
@@ -194,6 +205,26 @@ export function UserCharts(props: UserChartsProps) {
                 className='px-2.5 text-xs'
               >
                 {t(opt.label)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <Tabs
+          value={metric}
+          onValueChange={(value) =>
+            handleMetricChange(value as DashboardMetric)
+          }
+          className='shrink-0'
+        >
+          <TabsList>
+            {DASHBOARD_METRIC_OPTIONS.map((option) => (
+              <TabsTrigger
+                key={option.value}
+                value={option.value}
+                className='px-2.5 text-xs'
+              >
+                {t(option.labelKey)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -241,6 +272,9 @@ export function UserCharts(props: UserChartsProps) {
                   </IconBadge>
                   <div className='truncate text-sm font-semibold'>
                     {t(chart.labelKey)}
+                    <span className='text-muted-foreground font-normal'>
+                      / {t(metric === 'quota' ? 'Quota' : 'Tokens')}
+                    </span>
                   </div>
                 </div>
                 {chart.value === 'trend' && (
@@ -262,7 +296,7 @@ export function UserCharts(props: UserChartsProps) {
                   themeReady &&
                   spec && (
                     <VChart
-                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}-${chartResetVersions[chart.value] ?? 0}`}
+                      key={`user-${chart.value}-${metric}-${topUserLimit}-${resolvedTheme}-${chartResetVersions[chart.value] ?? 0}`}
                       spec={{
                         ...spec,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',

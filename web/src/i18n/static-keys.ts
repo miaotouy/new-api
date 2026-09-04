@@ -547,6 +547,14 @@ export const STATIC_I18N_KEYS = [
   'OpenAI Models upstream path must not contain {model}',
   'OpenAI Models route is required to enable upstream model checks',
 
+  // Dashboard chart metrics and labels (constants/dynamic keys passed to t at runtime)
+  'By quota',
+  'By requests',
+  'By tokens',
+  'Distribution',
+  'Ranking',
+  'Trend',
+
   // Dashboard flow stages (labels/descriptions passed to t at runtime)
   'User',
   'Node',

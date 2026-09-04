@@ -27,11 +27,13 @@ import { useTheme } from '@/context/theme-provider'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import {
   CONSUMPTION_DISTRIBUTION_CHART_OPTIONS,
+  DASHBOARD_METRIC_OPTIONS,
   DEFAULT_TIME_GRANULARITY,
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
 import type {
   ConsumptionDistributionChartType,
+  DashboardMetric,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
@@ -70,6 +72,7 @@ export function ConsumptionDistributionChart(
   const [chartType, setChartType] = useState<ConsumptionDistributionChartType>(
     props.defaultChartType ?? 'bar'
   )
+  const [metric, setMetric] = useState<DashboardMetric>('quota')
   const [themeReady, setThemeReady] = useState(false)
   const [resetVersion, setResetVersion] = useState(0)
   const themeManagerRef = useRef<
@@ -106,13 +109,19 @@ export function ConsumptionDistributionChart(
         props.loading ? [] : props.data,
         timeGranularity,
         t,
-        chartRadius
+        chartRadius,
+        metric
       ),
-    [props.data, props.loading, timeGranularity, t, chartRadius]
+    [props.data, props.loading, timeGranularity, t, chartRadius, metric]
   )
+  const chartTitle =
+    metric === 'quota'
+      ? t('Quota Distribution')
+      : `${t('Token Usage')} ${t('Distribution')}`
   const spec = chartType === 'bar' ? chartData.spec_line : chartData.spec_area
   const specType = typeof spec?.type === 'string' ? spec.type : chartType
   const chartKey = [
+    metric,
     chartType,
     specType,
     props.loading ? 'loading' : 'ready',
@@ -129,14 +138,33 @@ export function ConsumptionDistributionChart(
           <IconBadge tone='success' size='sm'>
             <WalletCards />
           </IconBadge>
-          <div className='text-sm font-semibold'>{t('Quota Distribution')}</div>
+          <div className='text-sm font-semibold'>{chartTitle}</div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {chartData.totalQuotaDisplay}
+            {t('Total:')}{' '}
+            {metric === 'quota'
+              ? chartData.totalQuotaDisplay
+              : chartData.totalTokensDisplay}
           </span>
         </div>
 
-        <div className='flex w-full items-center gap-1.5 sm:w-auto'>
-          <div className='bg-muted/60 inline-flex h-7 min-w-0 flex-1 overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:flex-none'>
+        <div className='flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto'>
+          <div className='bg-muted/60 inline-flex h-7 max-w-full min-w-0 overflow-x-auto rounded-lg border p-0.5 sm:h-8'>
+            {DASHBOARD_METRIC_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type='button'
+                onClick={() => setMetric(option.value)}
+                className={`shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  metric === option.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t(option.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className='bg-muted/60 inline-flex h-7 max-w-full min-w-0 overflow-x-auto rounded-lg border p-0.5 sm:h-8'>
             {CONSUMPTION_DISTRIBUTION_CHART_OPTIONS.map((item) => {
               const Icon = CHART_TYPE_ICONS[item.value]
               return (
@@ -144,7 +172,7 @@ export function ConsumptionDistributionChart(
                   key={item.value}
                   type='button'
                   onClick={() => setChartType(item.value)}
-                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors ${
                     chartType === item.value
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'

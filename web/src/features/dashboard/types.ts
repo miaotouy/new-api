@@ -66,7 +66,12 @@ export type FlowOverflowMode = 'aggregate' | 'hide'
 export type FlowRole = 'user' | 'admin' | 'root'
 
 export type FlowNodeKind =
-  'user' | 'node' | 'token' | 'group' | 'model' | 'channel'
+  | 'user'
+  | 'node'
+  | 'token'
+  | 'group'
+  | 'model'
+  | 'channel'
 
 export interface FlowNodeFilter {
   kind: FlowNodeKind
@@ -197,6 +202,10 @@ export interface DashboardFilters {
   username?: string
 }
 
+export type DashboardMetric = 'quota' | 'tokens'
+
+export type ModelAnalyticsMetric = 'requests' | DashboardMetric
+
 export type ConsumptionDistributionChartType = 'bar' | 'area'
 
 export type ModelAnalyticsChartTab = 'trend' | 'proportion' | 'top'
@@ -214,6 +223,7 @@ export interface UserChartsFilters {
   timeGranularity: TimeGranularity
   selectedRange: number
   topUserLimit: number
+  metric: DashboardMetric
 }
 
 // ============================================================================
@@ -249,6 +259,7 @@ export interface ProcessedChartData {
   spec_model_line: VChartSpec
   spec_rank_bar: VChartSpec
   totalQuotaDisplay: string
+  totalTokensDisplay: string
   totalCountDisplay: string
 }
 

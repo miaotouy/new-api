@@ -222,6 +222,7 @@ export function Dashboard() {
         timeGranularity: granularity,
         selectedRange: getDefaultDays(granularity),
         topUserLimit: 10,
+        metric: 'quota',
       }
     }
   )

@@ -28,10 +28,12 @@ import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset
 import {
   DEFAULT_TIME_GRANULARITY,
   MODEL_ANALYTICS_CHART_OPTIONS,
+  MODEL_ANALYTICS_METRIC_OPTIONS,
 } from '@/features/dashboard/constants'
 import { processChartData } from '@/features/dashboard/lib'
 import type {
   ModelAnalyticsChartTab,
+  ModelAnalyticsMetric,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
@@ -68,6 +70,7 @@ export function ModelCharts(props: ModelChartsProps) {
   const [activeTab, setActiveTab] = useState<ModelAnalyticsChartTab>(
     props.defaultChartTab ?? 'trend'
   )
+  const [metric, setMetric] = useState<ModelAnalyticsMetric>('requests')
   const [themeReady, setThemeReady] = useState(false)
   const [resetVersion, setResetVersion] = useState(0)
   const themeManagerRef = useRef<
@@ -104,15 +107,24 @@ export function ModelCharts(props: ModelChartsProps) {
         props.loading ? [] : props.data,
         timeGranularity,
         t,
-        chartRadius
+        chartRadius,
+        metric
       ),
-    [props.data, props.loading, timeGranularity, t, chartRadius]
+    [props.data, props.loading, timeGranularity, t, chartRadius, metric]
   )
+
+  let totalDisplay = chartData.totalCountDisplay
+  if (metric === 'quota') {
+    totalDisplay = chartData.totalQuotaDisplay
+  } else if (metric === 'tokens') {
+    totalDisplay = chartData.totalTokensDisplay
+  }
 
   const spec = chartData[CHART_SPEC_KEYS[activeTab]]
   const specType = typeof spec?.type === 'string' ? spec.type : activeTab
   const chartKey = [
     activeTab,
+    metric,
     specType,
     props.loading ? 'loading' : 'ready',
     props.data.length,
@@ -132,18 +144,34 @@ export function ModelCharts(props: ModelChartsProps) {
             {t('Model Call Analytics')}
           </div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {chartData.totalCountDisplay}
+            {t('Total:')} {totalDisplay}
           </span>
         </div>
 
-        <div className='flex w-full items-center gap-1.5 sm:w-auto'>
-          <div className='bg-muted/60 inline-flex h-7 min-w-0 flex-1 overflow-x-auto rounded-lg border p-0.5 sm:h-8 sm:flex-none'>
+        <div className='flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto'>
+          <div className='bg-muted/60 inline-flex h-7 max-w-full min-w-0 overflow-x-auto rounded-lg border p-0.5 sm:h-8'>
+            {MODEL_ANALYTICS_METRIC_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type='button'
+                onClick={() => setMetric(option.value)}
+                className={`shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                  metric === option.value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t(option.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className='bg-muted/60 inline-flex h-7 max-w-full min-w-0 overflow-x-auto rounded-lg border p-0.5 sm:h-8'>
             {MODEL_ANALYTICS_CHART_OPTIONS.map((tab) => (
               <button
                 key={tab.value}
                 type='button'
                 onClick={() => setActiveTab(tab.value)}
-                className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-md px-2.5 text-xs font-medium transition-colors ${
                   activeTab === tab.value
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
