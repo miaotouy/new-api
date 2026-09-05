@@ -167,6 +167,25 @@ export function parseLogOther(other: string): LogOtherData | null {
   }
 }
 
+/**
+ * Calculate the share of input tokens served from the upstream cache.
+ */
+export function getCacheHitRate(
+  cachedTokens: number,
+  inputTokens: number
+): number | null {
+  if (
+    !Number.isFinite(cachedTokens) ||
+    !Number.isFinite(inputTokens) ||
+    cachedTokens <= 0 ||
+    inputTokens <= 0
+  ) {
+    return null
+  }
+
+  return Math.min(100, Math.max(0, (cachedTokens / inputTokens) * 100))
+}
+
 export function getReasoningEffortVariant(
   effort: string | undefined
 ): StatusBadgeProps['variant'] {

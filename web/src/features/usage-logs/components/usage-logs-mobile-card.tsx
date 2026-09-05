@@ -40,7 +40,7 @@ import { cn } from '@/lib/utils'
 
 import { LOG_TYPE_ENUM } from '../constants'
 import type { UsageLog } from '../data/schema'
-import { parseLogOther } from '../lib/format'
+import { getCacheHitRate, parseLogOther } from '../lib/format'
 import { TASK_MOBILE_SUMMARY_FIELDS } from '../lib/task-mobile-layout'
 import {
   getLogTypeConfig,
@@ -212,6 +212,7 @@ function MobileTokensField({ log }: { log: UsageLog }) {
   const cacheWriteTokens = hasSplitCache
     ? cacheWrite5m + cacheWrite1h
     : other?.cache_creation_tokens || 0
+  const cacheHitRate = getCacheHitRate(cacheReadTokens, promptTokens)
   const showCache = cacheReadTokens > 0 || cacheWriteTokens > 0
 
   return (
@@ -223,8 +224,19 @@ function MobileTokensField({ log }: { log: UsageLog }) {
         {showCache ? (
           <div className='text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-none'>
             {cacheReadTokens > 0 && (
-              <span>
+              <span
+                title={
+                  cacheHitRate === null
+                    ? undefined
+                    : `${t('Cache Hit Rate')}: ${cacheHitRate.toFixed(1)}%`
+                }
+              >
                 {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                {cacheHitRate !== null && (
+                  <span className='text-muted-foreground/80 ml-1'>
+                    {t('Hit Rate')}: {cacheHitRate.toFixed(1)}%
+                  </span>
+                )}
               </span>
             )}
             {cacheWriteTokens > 0 && (
