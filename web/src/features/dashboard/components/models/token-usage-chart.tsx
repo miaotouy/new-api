@@ -25,9 +25,9 @@ import { IconBadge } from '@/components/ui/icon-badge'
 import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
+import { DASHBOARD_VALUE_AXIS_WIDTH } from '@/features/dashboard/constants'
 import { getDashboardChartColors } from '@/features/dashboard/lib/charts'
 import type { TokenUsageDataItem } from '@/features/dashboard/types'
-import dayjs from '@/lib/dayjs'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -40,10 +40,10 @@ type TokenUsageChartProps = {
   data: TokenUsageDataItem[]
   loading?: boolean
   timeGranularity: TimeGranularity
+  timePoints?: string[]
 }
 
 type TokenPoint = {
-  Timestamp: number
   Time: string
   Metric: string
   Tokens: number
@@ -55,44 +55,43 @@ function buildTokenChartData(
   data: TokenUsageDataItem[],
   timeGranularity: TimeGranularity,
   t: (key: string) => string,
-  radius: number
+  radius: number,
+  timePoints?: string[]
 ) {
   const inputLabel = t('Input Tokens')
   const outputLabel = t('Output Tokens')
   const cachedLabel = t('Cached Tokens')
   const buckets = new Map<
-    number,
+    string,
     { input: number; output: number; cached: number }
   >()
 
   for (const item of data) {
-    const timestamp = Number(item.created_at) || 0
-    const date = dayjs(timestamp * 1000)
-    let bucketTimestamp = date.startOf('hour').unix()
-    if (timeGranularity === 'day') {
-      bucketTimestamp = date.startOf('day').unix()
-    } else if (timeGranularity === 'week') {
-      bucketTimestamp = date.startOf('week').unix()
-    }
-    const bucket = buckets.get(bucketTimestamp) ?? {
-      input: 0,
-      output: 0,
-      cached: 0,
-    }
+    const time = formatChartTime(Number(item.created_at) || 0, timeGranularity)
+    const bucket = buckets.get(time) ?? { input: 0, output: 0, cached: 0 }
     bucket.input += Number(item.input_tokens) || 0
     bucket.output += Number(item.output_tokens) || 0
     bucket.cached += Number(item.cached_tokens) || 0
-    buckets.set(bucketTimestamp, bucket)
+    buckets.set(time, bucket)
   }
 
-  const values: TokenPoint[] = []
   let totalTokens = 0
   let totalCachedTokens = 0
-  for (const [bucketTimestamp, bucket] of buckets) {
-    const time = formatChartTime(bucketTimestamp, timeGranularity)
+  for (const bucket of buckets.values()) {
+    totalTokens += bucket.input + bucket.output
+    totalCachedTokens += bucket.cached
+  }
+
+  const orderedTimes =
+    timePoints && timePoints.length > 0
+      ? timePoints
+      : [...buckets.keys()].sort()
+
+  const values: TokenPoint[] = []
+  for (const time of orderedTimes) {
+    const bucket = buckets.get(time) ?? { input: 0, output: 0, cached: 0 }
     values.push(
       {
-        Timestamp: bucketTimestamp,
         Time: time,
         Metric: inputLabel,
         Tokens: bucket.input,
@@ -100,7 +99,6 @@ function buildTokenChartData(
         CachedTokens: bucket.cached,
       },
       {
-        Timestamp: bucketTimestamp,
         Time: time,
         Metric: outputLabel,
         Tokens: bucket.output,
@@ -108,7 +106,6 @@ function buildTokenChartData(
         CachedTokens: bucket.cached,
       },
       {
-        Timestamp: bucketTimestamp,
         Time: time,
         Metric: cachedLabel,
         Tokens: bucket.cached,
@@ -116,10 +113,7 @@ function buildTokenChartData(
         CachedTokens: bucket.cached,
       }
     )
-    totalTokens += bucket.input + bucket.output
-    totalCachedTokens += bucket.cached
   }
-  values.sort((a, b) => a.Timestamp - b.Timestamp)
 
   const format = (value: number) =>
     Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(value)
@@ -143,6 +137,7 @@ function buildTokenChartData(
         {
           orient: 'left',
           type: 'linear',
+          width: DASHBOARD_VALUE_AXIS_WIDTH,
           label: { formatMethod: (value: number) => format(value) },
         },
       ],
@@ -191,6 +186,7 @@ export function TokenUsageChart({
   data,
   loading,
   timeGranularity,
+  timePoints,
 }: TokenUsageChartProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -221,13 +217,20 @@ export function TokenUsageChart({
 
   const chartData = useMemo(
     () =>
-      buildTokenChartData(loading ? [] : data, timeGranularity, t, radius ?? 0),
-    [data, loading, radius, t, timeGranularity]
+      buildTokenChartData(
+        loading ? [] : data,
+        timeGranularity,
+        t,
+        radius ?? 0,
+        timePoints
+      ),
+    [data, loading, radius, t, timeGranularity, timePoints]
   )
   const chartKey = [
     loading ? 'loading' : 'ready',
     data.length,
     timeGranularity,
+    timePoints?.length ?? 0,
     resolvedTheme,
     customization.preset,
     resetVersion,

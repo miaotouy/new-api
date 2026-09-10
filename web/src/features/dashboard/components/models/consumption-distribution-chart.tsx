@@ -48,6 +48,7 @@ interface ConsumptionDistributionChartProps {
   data: QuotaDataItem[]
   loading?: boolean
   timeGranularity?: TimeGranularity
+  timePoints?: string[]
   defaultChartType?: ConsumptionDistributionChartType
 }
 
@@ -110,9 +111,18 @@ export function ConsumptionDistributionChart(
         timeGranularity,
         t,
         chartRadius,
-        metric
+        metric,
+        props.timePoints
       ),
-    [props.data, props.loading, timeGranularity, t, chartRadius, metric]
+    [
+      props.data,
+      props.loading,
+      props.timePoints,
+      timeGranularity,
+      t,
+      chartRadius,
+      metric,
+    ]
   )
   const chartTitle =
     metric === 'quota'
@@ -126,6 +136,7 @@ export function ConsumptionDistributionChart(
     specType,
     props.loading ? 'loading' : 'ready',
     props.data.length,
+    props.timePoints?.length ?? 0,
     resolvedTheme,
     customization.preset,
     resetVersion,

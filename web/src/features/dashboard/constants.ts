@@ -23,6 +23,9 @@ export const DASHBOARD_CHART_PREFERENCES_STORAGE_KEY =
   'dashboard_models_chart_preferences'
 export const DEFAULT_TIME_GRANULARITY = 'hour' as const
 export const MAX_CHART_TREND_POINTS = 7
+// Fixed width reserved for the vertical value axis so the time axis of every
+// dashboard chart shares the same plot area and stays aligned.
+export const DASHBOARD_VALUE_AXIS_WIDTH = 72
 
 export const DEFAULT_DASHBOARD_CHART_PREFERENCES: DashboardChartPreferences = {
   consumptionDistributionChart: 'bar',

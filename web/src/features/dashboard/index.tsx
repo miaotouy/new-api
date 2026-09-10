@@ -40,6 +40,7 @@ import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
+  buildChartTimePoints,
   buildDefaultDashboardFilters,
   getDefaultDays,
   getSavedChartPreferences,
@@ -228,6 +229,16 @@ export function Dashboard() {
   )
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
 
+  const modelTimeGranularity =
+    modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
+  // Share one time axis across the model dashboard charts so their columns
+  // stay vertically aligned even when the datasets differ.
+  const chartTimePoints = useMemo(
+    () =>
+      buildChartTimePoints([...modelData, ...tokenData], modelTimeGranularity),
+    [modelData, tokenData, modelTimeGranularity]
+  )
+
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
     setModelFilters(filters)
   }, [])
@@ -386,9 +397,8 @@ export function Dashboard() {
                   <LazyTokenUsageChart
                     data={tokenData}
                     loading={tokenDataLoading}
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
+                    timeGranularity={modelTimeGranularity}
+                    timePoints={chartTimePoints}
                   />
                 </Suspense>
               </FadeIn>
@@ -400,9 +410,8 @@ export function Dashboard() {
                     defaultChartType={
                       chartPreferences.consumptionDistributionChart
                     }
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
+                    timeGranularity={modelTimeGranularity}
+                    timePoints={chartTimePoints}
                   />
                 </Suspense>
               </FadeIn>
@@ -412,9 +421,8 @@ export function Dashboard() {
                     data={modelData}
                     loading={dataLoading}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
-                    timeGranularity={
-                      modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
-                    }
+                    timeGranularity={modelTimeGranularity}
+                    timePoints={chartTimePoints}
                   />
                 </Suspense>
               </FadeIn>

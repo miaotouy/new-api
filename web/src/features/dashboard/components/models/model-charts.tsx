@@ -56,6 +56,7 @@ interface ModelChartsProps {
   data: QuotaDataItem[]
   loading?: boolean
   timeGranularity?: TimeGranularity
+  timePoints?: string[]
   defaultChartTab?: ModelAnalyticsChartTab
 }
 
@@ -108,9 +109,18 @@ export function ModelCharts(props: ModelChartsProps) {
         timeGranularity,
         t,
         chartRadius,
-        metric
+        metric,
+        props.timePoints
       ),
-    [props.data, props.loading, timeGranularity, t, chartRadius, metric]
+    [
+      props.data,
+      props.loading,
+      props.timePoints,
+      timeGranularity,
+      t,
+      chartRadius,
+      metric,
+    ]
   )
 
   let totalDisplay = chartData.totalCountDisplay
@@ -128,6 +138,7 @@ export function ModelCharts(props: ModelChartsProps) {
     specType,
     props.loading ? 'loading' : 'ready',
     props.data.length,
+    props.timePoints?.length ?? 0,
     resolvedTheme,
     customization.preset,
     resetVersion,

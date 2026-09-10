@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { dataScheme as vchartDefaultDataScheme } from '@visactor/vchart/esm/theme/color-scheme/builtin/default'
 
-import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
+import {
+  DASHBOARD_VALUE_AXIS_WIDTH,
+  MAX_CHART_TREND_POINTS,
+} from '@/features/dashboard/constants'
 import type {
   QuotaDataItem,
   ProcessedChartData,
@@ -68,6 +71,42 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
 }
 
 /**
+ * Build the shared time axis used by every dashboard trend chart. Points are
+ * derived from the data and padded to MAX_CHART_TREND_POINTS so charts fed by
+ * different datasets (quota vs. token usage) still render identical columns.
+ */
+export function buildChartTimePoints(
+  items: Array<{ created_at?: number }>,
+  timeGranularity: TimeGranularity
+): string[] {
+  const times = new Set<string>()
+  let lastTimestamp = 0
+  for (const item of items) {
+    const timestamp = Number(item.created_at) || 0
+    if (timestamp <= 0) continue
+    if (timestamp > lastTimestamp) lastTimestamp = timestamp
+    times.add(formatChartTime(timestamp, timeGranularity))
+  }
+  if (times.size === 0) return []
+
+  const sorted = [...times].sort()
+  if (sorted.length >= MAX_CHART_TREND_POINTS) return sorted
+
+  let intervalSec = 3600
+  if (timeGranularity === 'day') {
+    intervalSec = 86400
+  } else if (timeGranularity === 'week') {
+    intervalSec = 604800
+  }
+  return Array.from({ length: MAX_CHART_TREND_POINTS }, (_, i) =>
+    formatChartTime(
+      lastTimestamp - (MAX_CHART_TREND_POINTS - 1 - i) * intervalSec,
+      timeGranularity
+    )
+  )
+}
+
+/**
  * Process and aggregate chart data
  */
 export function processChartData(
@@ -75,7 +114,8 @@ export function processChartData(
   timeGranularity: TimeGranularity = 'day',
   t?: TFunction,
   chartCornerRadius?: number,
-  metric: ModelAnalyticsMetric = 'requests'
+  metric: ModelAnalyticsMetric = 'requests',
+  timePoints?: string[]
 ): ProcessedChartData {
   const tt: TFunction = t ?? ((x) => x)
   const otherLabel = tt('Other')
@@ -201,6 +241,10 @@ export function processChartData(
         seriesField: 'Model',
         stack: true,
         legends: { visible: true, selectMode: 'single' },
+        axes: [
+          { orient: 'bottom', type: 'band' },
+          { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+        ],
       },
       spec_area: {
         type: 'area',
@@ -210,6 +254,10 @@ export function processChartData(
         seriesField: 'Model',
         stack: true,
         legends: { visible: true, selectMode: 'single' },
+        axes: [
+          { orient: 'bottom', type: 'band' },
+          { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+        ],
       },
       spec_model_line: {
         type: 'area',
@@ -218,6 +266,10 @@ export function processChartData(
         yField: 'Count',
         seriesField: 'Model',
         legends: { visible: true, selectMode: 'single' },
+        axes: [
+          { orient: 'bottom', type: 'band' },
+          { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+        ],
         title: {
           visible: true,
           text: chartTitles.trend,
@@ -289,7 +341,6 @@ export function processChartData(
   })
 
   const allModels = [...modelTotalsMap.keys()]
-  const sortedTimes = [...timeModelMap.keys()].sort()
   const sortedModels = [...allModels].sort()
   const modelColorDomain = [...new Set([...sortedModels, otherLabel])]
   const modelColorRange = getDashboardChartColors(modelColorDomain.length)
@@ -302,28 +353,10 @@ export function processChartData(
     range: modelColorRange,
   }
 
-  // Pad time points if too few (default 7 points)
-  const MAX_TREND_POINTS = MAX_CHART_TREND_POINTS
-  const fillTimePoints = (times: string[]) => {
-    if (times.length >= MAX_TREND_POINTS) return times
-    const lastTime = Math.max(
-      ...data.map((item) => Number(item.created_at) || 0)
-    )
-    let intervalSec = 3600
-    if (timeGranularity === 'day') {
-      intervalSec = 86400
-    } else if (timeGranularity === 'week') {
-      intervalSec = 604800
-    }
-    const padded = Array.from({ length: MAX_TREND_POINTS }, (_, i) =>
-      formatChartTime(
-        lastTime - (MAX_TREND_POINTS - 1 - i) * intervalSec,
-        timeGranularity
-      )
-    )
-    return padded
-  }
-  const chartTimes = fillTimePoints(sortedTimes)
+  const chartTimes =
+    timePoints && timePoints.length > 0
+      ? timePoints
+      : buildChartTimePoints(data, timeGranularity)
 
   const totalTimes = [...modelTotalsMap.values()].reduce(
     (sum, x) => sum + (Number(x.count) || 0),
@@ -533,6 +566,10 @@ export function processChartData(
       seriesField: 'Model',
       stack: true,
       legends: { visible: true, selectMode: 'single' },
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+      ],
       color: modelColor,
       bar: {
         state: {
@@ -571,6 +608,10 @@ export function processChartData(
       seriesField: 'Model',
       stack: false,
       legends: { visible: true, selectMode: 'single' },
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+      ],
       color: modelColor,
       tooltip: {
         mark: {
@@ -619,6 +660,10 @@ export function processChartData(
       seriesField: 'Model',
       stack: false,
       legends: { visible: true, selectMode: 'single' },
+      axes: [
+        { orient: 'bottom', type: 'band' },
+        { orient: 'left', type: 'linear', width: DASHBOARD_VALUE_AXIS_WIDTH },
+      ],
       color: modelColor,
       title: {
         visible: true,
