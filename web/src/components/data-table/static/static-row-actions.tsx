@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Pencil, Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -34,6 +35,12 @@ type StaticRowActionsProps = {
   onDelete: () => void
   editDisabled?: boolean
   deleteDisabled?: boolean
+  additionalActions?: Array<{
+    label: string
+    onSelect: () => void
+    icon?: ReactNode
+    disabled?: boolean
+  }>
 }
 
 export function StaticRowActions(props: StaticRowActionsProps) {
@@ -49,6 +56,18 @@ export function StaticRowActions(props: StaticRowActionsProps) {
         <Pencil />
       </Button>
       <DataTableRowActionMenu ariaLabel={props.menuLabel}>
+        {props.additionalActions?.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            onClick={action.onSelect}
+            disabled={action.disabled}
+          >
+            {action.label}
+            {action.icon ? (
+              <DropdownMenuShortcut>{action.icon}</DropdownMenuShortcut>
+            ) : null}
+          </DropdownMenuItem>
+        ))}
         <DropdownMenuItem
           onClick={props.onDelete}
           disabled={props.deleteDisabled}

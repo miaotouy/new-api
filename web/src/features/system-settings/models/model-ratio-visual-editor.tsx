@@ -24,7 +24,7 @@ import type {
   VisibilityState,
   SortingState,
 } from '@tanstack/react-table'
-import { Copy, Plus } from 'lucide-react'
+import { ClipboardPaste, Copy, Plus } from 'lucide-react'
 import {
   useState,
   useMemo,
@@ -94,6 +94,8 @@ type ModelRatioVisualEditorProps = {
   candidateModelNames?: string[]
   candidateModelsLoading?: boolean
   filterMode?: 'all' | 'unset'
+  copiedPricing?: ModelRatioData | null
+  onCopyPricing?: (pricing: ModelRatioData) => void
   onChange: (field: string, value: string) => void
   onSave: () => void | Promise<void>
   isSaving: boolean
@@ -133,6 +135,8 @@ const ModelRatioVisualEditorComponent = forwardRef<
     candidateModelNames,
     candidateModelsLoading,
     filterMode = 'all',
+    copiedPricing,
+    onCopyPricing,
     onChange,
     onSave,
     isSaving,
@@ -311,33 +315,38 @@ const ModelRatioVisualEditorComponent = forwardRef<
     return counts
   }, [models, taskModelNames])
 
+  const getEditablePricingData = useCallback((model: ModelRow) => {
+    const editableModel = model.draft ?? model.saved ?? model
+    let editBillingMode: PricingMode = 'per-token'
+    if (editableModel.billingMode === 'tiered_expr') {
+      editBillingMode = 'tiered_expr'
+    } else if (editableModel.price && editableModel.price !== '') {
+      editBillingMode = 'per-request'
+    }
+
+    return {
+      name: editableModel.name,
+      price: editableModel.price,
+      ratio: editableModel.ratio,
+      cacheRatio: editableModel.cacheRatio,
+      createCacheRatio: editableModel.createCacheRatio,
+      completionRatio: editableModel.completionRatio,
+      imageRatio: editableModel.imageRatio,
+      audioRatio: editableModel.audioRatio,
+      audioCompletionRatio: editableModel.audioCompletionRatio,
+      billingMode: editBillingMode,
+      billingExpr: editableModel.billingExpr,
+      requestRuleExpr: editableModel.requestRuleExpr,
+    }
+  }, [])
+
   const handleEdit = useCallback(
     (model: ModelRow) => {
-      const editableModel = model.draft ?? model.saved ?? model
-      let editBillingMode: PricingMode = 'per-token'
-      if (editableModel.billingMode === 'tiered_expr') {
-        editBillingMode = 'tiered_expr'
-      } else if (editableModel.price && editableModel.price !== '') {
-        editBillingMode = 'per-request'
-      }
-      setEditData({
-        name: editableModel.name,
-        price: editableModel.price,
-        ratio: editableModel.ratio,
-        cacheRatio: editableModel.cacheRatio,
-        createCacheRatio: editableModel.createCacheRatio,
-        completionRatio: editableModel.completionRatio,
-        imageRatio: editableModel.imageRatio,
-        audioRatio: editableModel.audioRatio,
-        audioCompletionRatio: editableModel.audioCompletionRatio,
-        billingMode: editBillingMode,
-        billingExpr: editableModel.billingExpr,
-        requestRuleExpr: editableModel.requestRuleExpr,
-      })
+      setEditData(getEditablePricingData(model))
       setEditorOpen(true)
       if (isMobile) setSheetOpen(true)
     },
-    [isMobile]
+    [getEditablePricingData, isMobile]
   )
 
   const handleAdd = useCallback(() => {
@@ -359,6 +368,28 @@ const ModelRatioVisualEditorComponent = forwardRef<
       })
     },
     []
+  )
+
+  const handleCopyPricing = useCallback(
+    async (model: ModelRow) => {
+      let pricing: ModelRatioData = getEditablePricingData(model)
+      if (
+        editorOpen &&
+        editData?.name === pricing.name &&
+        editorPanelRef.current
+      ) {
+        const committed = await editorPanelRef.current.commitDraft()
+        if (!committed) return
+        pricing = committed
+        setEditData(committed)
+      }
+
+      onCopyPricing?.(pricing)
+      toast.success(
+        t('Copied {{name}} pricing configuration', { name: pricing.name })
+      )
+    },
+    [editData?.name, editorOpen, getEditablePricingData, onCopyPricing, t]
   )
 
   const handleDelete = useCallback(
@@ -457,18 +488,6 @@ const ModelRatioVisualEditorComponent = forwardRef<
     ]
   )
 
-  const columns = useMemo(
-    () =>
-      buildModelRatioColumns({
-        onDelete: handleDelete,
-        onEdit: handleEdit,
-        deleteDisabled: filterMode === 'unset',
-        taskModelNames,
-        t,
-      }),
-    [handleEdit, handleDelete, filterMode, t, taskModelNames]
-  )
-
   const ensurePageInRange = useCallback((pageCount: number) => {
     setPagination((prev) =>
       pageCount > 0 && prev.pageIndex >= pageCount
@@ -476,31 +495,6 @@ const ModelRatioVisualEditorComponent = forwardRef<
         : prev
     )
   }, [])
-
-  const { table } = useDataTable({
-    data: models,
-    columns,
-    getRowId: (row) => row.name,
-    ensurePageInRange,
-    sorting,
-    columnFilters,
-    globalFilter,
-    columnVisibility,
-    pagination,
-    rowSelection,
-    enableRowSelection: true,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: handleGlobalFilterChange,
-    onColumnVisibilityChange: setColumnVisibility,
-    onPaginationChange: setPagination,
-    onRowSelectionChange: setRowSelection,
-    autoResetPageIndex: false,
-    globalFilterFn: (row, _columnId, filterValue) => {
-      const searchValue = String(filterValue).toLowerCase()
-      return row.original.name.toLowerCase().includes(searchValue)
-    },
-  })
 
   const persistPricingData = useCallback(
     (data: ModelRatioData, targetNames: string[] = [data.name]) => {
@@ -551,7 +545,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
         value: string | undefined
       ) => {
         if (!value || value === '') return
-        const parsed = parseFloat(value)
+        const parsed = Number.parseFloat(value)
         if (Number.isFinite(parsed)) target[name] = parsed
       }
 
@@ -636,6 +630,73 @@ const ModelRatioVisualEditorComponent = forwardRef<
     ]
   )
 
+  const handlePastePricing = useCallback(
+    (model: ModelRow) => {
+      if (!copiedPricing) return
+
+      persistPricingData(copiedPricing, [model.name])
+      toast.success(
+        t('Applied {{name}} pricing to {{count}} models', {
+          name: copiedPricing.name,
+          count: 1,
+        })
+      )
+    },
+    [copiedPricing, persistPricingData, t]
+  )
+
+  const columns = useMemo(
+    () =>
+      buildModelRatioColumns({
+        onDelete: handleDelete,
+        onEdit: handleEdit,
+        onCopy: filterMode === 'all' ? handleCopyPricing : undefined,
+        onPaste:
+          filterMode === 'unset' && copiedPricing
+            ? handlePastePricing
+            : undefined,
+        pasteSourceName: copiedPricing?.name,
+        deleteDisabled: filterMode === 'unset',
+        taskModelNames,
+        t,
+      }),
+    [
+      copiedPricing,
+      filterMode,
+      handleCopyPricing,
+      handleDelete,
+      handleEdit,
+      handlePastePricing,
+      t,
+      taskModelNames,
+    ]
+  )
+
+  const { table } = useDataTable({
+    data: models,
+    columns,
+    getRowId: (row) => row.name,
+    ensurePageInRange,
+    sorting,
+    columnFilters,
+    globalFilter,
+    columnVisibility,
+    pagination,
+    rowSelection,
+    enableRowSelection: true,
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onGlobalFilterChange: handleGlobalFilterChange,
+    onColumnVisibilityChange: setColumnVisibility,
+    onPaginationChange: setPagination,
+    onRowSelectionChange: setRowSelection,
+    autoResetPageIndex: false,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const searchValue = String(filterValue).toLowerCase()
+      return row.original.name.toLowerCase().includes(searchValue)
+    },
+  })
+
   const handleBatchCopy = useCallback(async () => {
     if (!editData) {
       toast.error(t('Open a source model first'))
@@ -672,6 +733,28 @@ const ModelRatioVisualEditorComponent = forwardRef<
       })
     )
   }, [editData, editorOpen, persistPricingData, t, table])
+
+  const handleBatchPaste = useCallback(() => {
+    if (!copiedPricing) return
+
+    const targetNames = table
+      .getFilteredSelectedRowModel()
+      .rows.map((row) => row.original.name)
+
+    if (targetNames.length === 0) {
+      toast.error(t('Select at least one target model'))
+      return
+    }
+
+    persistPricingData(copiedPricing, targetNames)
+    table.resetRowSelection()
+    toast.success(
+      t('Applied {{name}} pricing to {{count}} models', {
+        name: copiedPricing.name,
+        count: targetNames.length,
+      })
+    )
+  }, [copiedPricing, persistPricingData, t, table])
 
   useImperativeHandle(
     ref,
@@ -833,12 +916,25 @@ const ModelRatioVisualEditorComponent = forwardRef<
       </div>
 
       <DataTableBulkActions table={table} entityName={t('model')}>
-        <Button size='sm' disabled={!editData} onClick={handleBatchCopy}>
-          <Copy data-icon='inline-start' />
-          {editData
-            ? t('Copy {{name}} pricing', { name: editData.name })
-            : t('Open a source model first')}
-        </Button>
+        {filterMode === 'unset' ? (
+          <Button
+            size='sm'
+            disabled={!copiedPricing}
+            onClick={handleBatchPaste}
+          >
+            <ClipboardPaste data-icon='inline-start' />
+            {copiedPricing
+              ? t('Paste {{name}} pricing', { name: copiedPricing.name })
+              : t('Copy a pricing configuration first')}
+          </Button>
+        ) : (
+          <Button size='sm' disabled={!editData} onClick={handleBatchCopy}>
+            <Copy data-icon='inline-start' />
+            {editData
+              ? t('Copy {{name}} pricing', { name: editData.name })
+              : t('Open a source model first')}
+          </Button>
+        )}
       </DataTableBulkActions>
 
       {isMobile && (

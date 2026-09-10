@@ -42,6 +42,7 @@ import {
   SettingsSwitchContent,
   SettingsSwitchItem,
 } from '../components/settings-form-layout'
+import type { ModelRatioData } from './model-pricing-core'
 import {
   ModelRatioVisualEditor,
   type ModelRatioVisualEditorHandle,
@@ -69,6 +70,8 @@ type ModelRatioFormProps = {
   isSaving: boolean
   isResetting: boolean
   variant?: 'default' | 'unset'
+  copiedPricing?: ModelRatioData | null
+  onCopyPricing?: (pricing: ModelRatioData) => void
 }
 
 type ModelJsonFieldName =
@@ -172,6 +175,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
   isSaving,
   isResetting,
   variant = 'default',
+  copiedPricing,
+  onCopyPricing,
 }: ModelRatioFormProps) {
   const { t } = useTranslation()
   const isUnsetVariant = variant === 'unset'
@@ -221,44 +226,57 @@ export const ModelRatioForm = memo(function ModelRatioForm({
 
   return (
     <div className='space-y-6'>
-      {!isUnsetVariant && (
-        <div className='flex flex-wrap justify-end gap-2'>
+      <div className='flex flex-wrap justify-end gap-2'>
+        {isUnsetVariant && form.formState.isDirty && (
           <Button
             type='button'
-            variant='destructive'
             size='sm'
-            onClick={onReset}
-            disabled={isResetting}
+            onClick={handleSave}
+            disabled={isSaving}
           >
-            <RotateCcw data-icon='inline-start' />
-            {t('Reset prices')}
+            <Save data-icon='inline-start' />
+            {isSaving ? t('Saving...') : t('Save model prices')}
           </Button>
-          {editMode === 'json' && (
+        )}
+        {!isUnsetVariant && (
+          <>
             <Button
               type='button'
+              variant='destructive'
               size='sm'
-              onClick={handleSave}
-              disabled={isSaving}
+              onClick={onReset}
+              disabled={isResetting}
             >
-              <Save data-icon='inline-start' />
-              {isSaving ? t('Saving...') : t('Save model prices')}
+              <RotateCcw data-icon='inline-start' />
+              {t('Reset prices')}
             </Button>
-          )}
-          <Button variant='outline' size='sm' onClick={toggleEditMode}>
-            {editMode === 'visual' ? (
-              <>
-                <Code2 className='mr-2 h-4 w-4' />
-                {t('Switch to JSON')}
-              </>
-            ) : (
-              <>
-                <Eye className='mr-2 h-4 w-4' />
-                {t('Switch to Visual')}
-              </>
+            {editMode === 'json' && (
+              <Button
+                type='button'
+                size='sm'
+                onClick={handleSave}
+                disabled={isSaving}
+              >
+                <Save data-icon='inline-start' />
+                {isSaving ? t('Saving...') : t('Save model prices')}
+              </Button>
             )}
-          </Button>
-        </div>
-      )}
+            <Button variant='outline' size='sm' onClick={toggleEditMode}>
+              {editMode === 'visual' ? (
+                <>
+                  <Code2 className='mr-2 h-4 w-4' />
+                  {t('Switch to JSON')}
+                </>
+              ) : (
+                <>
+                  <Eye className='mr-2 h-4 w-4' />
+                  {t('Switch to Visual')}
+                </>
+              )}
+            </Button>
+          </>
+        )}
+      </div>
 
       <Form {...form}>
         {editMode === 'visual' ? (
@@ -292,6 +310,8 @@ export const ModelRatioForm = memo(function ModelRatioForm({
                 isUnsetVariant && enabledModelsQuery.isLoading
               }
               filterMode={isUnsetVariant ? 'unset' : 'all'}
+              copiedPricing={copiedPricing}
+              onCopyPricing={onCopyPricing}
               onSave={handleSave}
               isSaving={isSaving}
               onChange={(field, value) => {

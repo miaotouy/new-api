@@ -33,6 +33,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { positiveIntegerSchema } from '../utils/numeric-field'
 import { GroupRatioForm } from './group-ratio-form'
+import type { ModelRatioData } from './model-pricing-core'
 import { ModelRatioForm } from './model-ratio-form'
 import { ToolPriceSettings } from './tool-price-settings'
 import { UpstreamRatioSync } from './upstream-ratio-sync'
@@ -164,6 +165,9 @@ export function RatioSettingsCard({
   const updateOption = useUpdateOption()
   const queryClient = useQueryClient()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [copiedPricing, setCopiedPricing] = useState<ModelRatioData | null>(
+    null
+  )
 
   const resetMutation = useMutation({
     mutationFn: resetModelRatios,
@@ -430,6 +434,8 @@ export function RatioSettingsCard({
           isSaving={updateOption.isPending}
           isResetting={resetMutation.isPending}
           variant={tab === 'unset-models' ? 'unset' : 'default'}
+          copiedPricing={copiedPricing}
+          onCopyPricing={setCopiedPricing}
         />
       )
     }
