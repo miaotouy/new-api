@@ -374,6 +374,11 @@ function CommonLogsCard<TData>({
           <SummaryField cell={cells.get('prompt_tokens')} />
         )}
         <SummaryField
+          label={t('Endpoint')}
+          cell={cells.get('endpoint')}
+          className='col-span-2'
+        />
+        <SummaryField
           label={t('Details')}
           cell={cells.get('content')}
           className='col-span-2 bg-transparent px-0 py-0'

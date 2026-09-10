@@ -170,6 +170,7 @@ export interface LogOtherData {
   login_method?: string
   user_agent?: string
   request_path?: string
+  upstream_request_path?: string
   request_conversion?: string[]
   ws?: boolean
   audio?: boolean

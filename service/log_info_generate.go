@@ -46,22 +46,29 @@ func attachQuotaSaturation(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, o
 		clamp.Op, clamp.Kind, clamp.Original, clamp.Clamped, relayInfo.UserId, relayInfo.GetBillingModelName()))
 }
 
-func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other *model.LogOther) {
+// AppendRequestPath records the inbound request path and, when the request
+// reached an upstream attempt, the path of the URL that was actually sent.
+// The upstream path lets the log UI show endpoint conversions such as
+// /v1/chat/completions -> /v1/responses.
+func AppendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other *model.LogOther) {
 	if other == nil {
 		return
 	}
+	requestPath := ""
 	if ctx != nil && ctx.Request != nil && ctx.Request.URL != nil {
-		if path := ctx.Request.URL.Path; path != "" {
-			other.SetPublic("request_path", path)
-			return
+		requestPath = ctx.Request.URL.Path
+	}
+	if requestPath == "" && relayInfo != nil && relayInfo.RequestURLPath != "" {
+		requestPath = relayInfo.RequestURLPath
+		if idx := strings.Index(requestPath, "?"); idx != -1 {
+			requestPath = requestPath[:idx]
 		}
 	}
-	if relayInfo != nil && relayInfo.RequestURLPath != "" {
-		path := relayInfo.RequestURLPath
-		if idx := strings.Index(path, "?"); idx != -1 {
-			path = path[:idx]
-		}
-		other.SetPublic("request_path", path)
+	if requestPath != "" {
+		other.SetPublic("request_path", requestPath)
+	}
+	if relayInfo != nil && relayInfo.UpstreamURLPath != "" {
+		other.SetPublic("upstream_request_path", relayInfo.UpstreamURLPath)
 	}
 }
 
@@ -122,7 +129,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendRelayLogAdminInfo(ctx, relayInfo, other)
-	appendRequestPath(ctx, relayInfo, other)
+	AppendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
 	appendBillingInfo(relayInfo, other)
@@ -310,7 +317,7 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData hosttypes.P
 	if priceData.GroupRatioInfo.HasSpecialRatio {
 		other.SetPublic("user_group_ratio", priceData.GroupRatioInfo.GroupSpecialRatio)
 	}
-	appendRequestPath(nil, relayInfo, other)
+	AppendRequestPath(nil, relayInfo, other)
 	return other
 }
 

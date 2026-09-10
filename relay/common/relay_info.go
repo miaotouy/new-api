@@ -105,7 +105,13 @@ type RelayInfo struct {
 	// aliases never participate in channel selection or upstream routing.
 	BillingModelName string
 
-	RequestURLPath     string
+	RequestURLPath string
+	// UpstreamURLPath is the path of the URL actually sent to the upstream
+	// provider for the current attempt (scheme, host and query excluded).
+	// It is recorded on the usage log so inbound/upstream endpoint conversions
+	// are auditable. Reset per attempt in InitChannelMeta; empty when no
+	// upstream request was sent.
+	UpstreamURLPath    string
 	RequestHeaders     map[string]string
 	ShouldIncludeUsage bool
 	DisablePing        bool // 是否禁止向下游发送自定义 Ping
@@ -211,6 +217,7 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	// Per-attempt only. Do not clear StreamStatus, conversion diagnostics,
 	// LastError, or billing accumulators — those are request-scoped.
 	info.SendResponseCount = 0
+	info.UpstreamURLPath = ""
 	info.ClaudeToChatStreamState = nil
 	info.ChatToGeminiStreamState = nil
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)

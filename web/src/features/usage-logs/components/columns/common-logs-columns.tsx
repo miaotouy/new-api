@@ -61,6 +61,7 @@ import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
+import { RequestEndpointCell } from '../request-endpoint-cell'
 import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
 
@@ -629,6 +630,18 @@ export function useCommonLogsColumns(
         )
       },
       meta: { mobileTitle: true },
+    },
+    {
+      id: 'endpoint',
+      header: t('Endpoint'),
+      accessorFn: (row) => parseLogOther(row.other)?.request_path ?? '',
+      cell: function EndpointCell({ row }) {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        return <RequestEndpointCell other={parseLogOther(log.other)} />
+      },
+      size: 200,
     },
     {
       accessorKey: 'is_stream',
