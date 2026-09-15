@@ -81,6 +81,7 @@ func ApplyThinkingConfig(geminiRequest *dto.GeminiChatRequest, info convmeta.Met
 
 	modelName := convmeta.UpstreamModelName(info)
 	var source reasoning.Intent
+	crossProtocol := len(oaiRequest) > 0
 	if len(oaiRequest) > 0 {
 		if modelName == "" {
 			modelName = oaiRequest[0].Model
@@ -100,6 +101,28 @@ func ApplyThinkingConfig(geminiRequest *dto.GeminiChatRequest, info convmeta.Met
 	}
 	if preserveSuffix {
 		suffix = reasoning.Intent{}
+	}
+	// Native Gemini requests already use the target protocol. Without a host
+	// modifier, read portable effort metadata without running the capability
+	// renderer or rewriting provider-native controls.
+	if !crossProtocol && suffix.IsEmpty() {
+		if info != nil {
+			effort := ""
+			if config := geminiRequest.GenerationConfig.ThinkingConfig; config != nil {
+				effort = config.ThinkingLevel
+				// Gemini accepts thinkingLevel case-insensitively; record the
+				// canonical effort so logs match other protocols. Unknown values
+				// stay as sent because this path does not validate.
+				if canonical, err := reasoning.ParseEffort(effort); err == nil {
+					effort = string(canonical)
+				}
+				if effort == "" && config.ThinkingBudget != nil {
+					effort = string(reasoning.EffortFromBudget(*config.ThinkingBudget))
+				}
+			}
+			info.SetReasoningEffort(effort)
+		}
+		return nil
 	}
 	native, err := reasoning.FromGemini(geminiRequest)
 	if err != nil {

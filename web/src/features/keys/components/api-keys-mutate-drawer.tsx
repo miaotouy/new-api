@@ -59,13 +59,15 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { useStatus } from "@/hooks/use-status";
-import { getUserModels, getUserGroups } from "@/lib/api";
-import { getCurrencyDisplay, getCurrencyLabel } from "@/lib/currency";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import { useStatus } from '@/hooks/use-status'
+import { getUserModels, getUserGroups } from '@/lib/api'
+import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
+import { cn } from '@/lib/utils'
 
 import {
   createApiKey,
@@ -123,8 +125,8 @@ export function ApiKeysMutateDrawer({
 
   // Fetch models
   const { data: modelsData } = useQuery({
-    queryKey: ["user-models"],
-    queryFn: getUserModels,
+    queryKey: ['user-models'],
+    queryFn: async () => requireServerSuccess(await getUserModels()),
     enabled: open,
     staleTime: 0,
   });
@@ -135,8 +137,8 @@ export function ApiKeysMutateDrawer({
     isFetched: groupsFetched,
     isFetching: groupsFetching,
   } = useQuery({
-    queryKey: ["user-groups"],
-    queryFn: getUserGroups,
+    queryKey: ['user-groups'],
+    queryFn: async () => requireServerSuccess(await getUserGroups()),
     enabled: open,
     staleTime: 0,
   });
@@ -146,8 +148,9 @@ export function ApiKeysMutateDrawer({
     isFetched: apiKeyFetched,
     isFetching: apiKeyFetching,
   } = useQuery({
-    queryKey: ["api-key", currentRowId],
-    queryFn: () => getApiKey(currentRowId ?? 0),
+    queryKey: ['api-key', currentRowId],
+    queryFn: async () =>
+      requireServerSuccess(await getApiKey(currentRowId ?? 0)),
     enabled: open && isUpdate && currentRowId !== undefined,
     staleTime: 0,
   });
@@ -157,8 +160,8 @@ export function ApiKeysMutateDrawer({
     isFetched: autoGroupsFetched,
     isFetching: autoGroupsFetching,
   } = useQuery({
-    queryKey: ["token-auto-groups"],
-    queryFn: getTokenAutoGroups,
+    queryKey: ['token-auto-groups'],
+    queryFn: async () => requireServerSuccess(await getTokenAutoGroups()),
     enabled: open,
     staleTime: 0,
   });
@@ -331,7 +334,7 @@ export function ApiKeysMutateDrawer({
           onOpenChange(false);
           triggerRefresh();
         } else {
-          toast.error(result.message || t(ERROR_MESSAGES.UPDATE_FAILED));
+          handleServerError(result, t(ERROR_MESSAGES.UPDATE_FAILED))
         }
       } else {
         // Create mode - handle batch creation
@@ -361,8 +364,8 @@ export function ApiKeysMutateDrawer({
               }
             }
           } else {
-            toast.error(result.message || t(ERROR_MESSAGES.CREATE_FAILED));
-            break;
+            handleServerError(result, t(ERROR_MESSAGES.CREATE_FAILED))
+            break
           }
         }
 
@@ -376,8 +379,8 @@ export function ApiKeysMutateDrawer({
           triggerRefresh();
         }
       }
-    } catch {
-      toast.error(t(ERROR_MESSAGES.UNEXPECTED));
+    } catch (error) {
+      handleServerError(error, t(ERROR_MESSAGES.UNEXPECTED))
     } finally {
       setIsSubmitting(false);
     }

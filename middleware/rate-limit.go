@@ -54,7 +54,7 @@ func redisTokenRateLimitKey(tokenID int) string {
 	return fmt.Sprintf("%s:token:%d", redisRateLimitNamespace, tokenID)
 }
 
-func redisReplyInteger(value interface{}) (int64, error) {
+func redisReplyInteger(value any) (int64, error) {
 	switch typed := value.(type) {
 	case int64:
 		return typed, nil
