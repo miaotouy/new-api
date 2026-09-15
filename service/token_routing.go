@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -134,14 +135,15 @@ func BuildTokenRoutePlan(c *gin.Context, tokenGroup, modelName, requestPath stri
 		consumedChannelIDs: make(map[int]struct{}),
 	}
 
+	filters := GetChannelConstraints(c).Filters
 	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 	if mode == "manual" {
-		return buildManualRoutePlan(c, plan, modelName, requestPath, userGroup)
+		return buildManualRoutePlan(c, plan, modelName, requestPath, userGroup, filters)
 	}
-	return buildAutomaticRoutePlan(c, plan, tokenGroup, modelName, requestPath, userGroup)
+	return buildAutomaticRoutePlan(c, plan, tokenGroup, modelName, requestPath, userGroup, filters)
 }
 
-func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPath, userGroup string) (*RoutePlan, error) {
+func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPath, userGroup string, filters []dto.ChannelFilter) (*RoutePlan, error) {
 	tokenID := common.GetContextKeyInt(c, constant.ContextKeyTokenId)
 	rules, err := model.GetTokenRouteRules(tokenID)
 	if err != nil {
@@ -157,7 +159,7 @@ func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPat
 			if err != nil {
 				return plan, err
 			}
-			appendRouteChannels(plan, seen, rule.GroupName, channels, userGroup, rule.Position)
+			appendRouteChannels(plan, seen, rule.GroupName, filterRouteChannels(channels, modelName, filters), userGroup, rule.Position)
 			continue
 		}
 		if rule.Kind != model.TokenRouteKindChannel || rule.ChannelID <= 0 || !routeGroupAllowed(userGroup, rule.GroupName, plan.MaxRatio) {
@@ -167,7 +169,7 @@ func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPat
 		if err != nil {
 			return plan, err
 		}
-		for _, channel := range channels {
+		for _, channel := range filterRouteChannels(channels, modelName, filters) {
 			if channel.Id == rule.ChannelID {
 				appendRouteCandidate(plan, seen, rule.GroupName, channel, userGroup, rule.Position)
 				break
@@ -180,7 +182,7 @@ func buildManualRoutePlan(c *gin.Context, plan *RoutePlan, modelName, requestPat
 	return plan, nil
 }
 
-func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelName, requestPath, userGroup string) (*RoutePlan, error) {
+func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelName, requestPath, userGroup string, filters []dto.ChannelFilter) (*RoutePlan, error) {
 	groups := routeGroups(userGroup, tokenGroup, plan.FailoverEnabled)
 	seenGroups := make(map[string]struct{}, len(groups))
 	seenChannels := make(map[int]struct{})
@@ -193,7 +195,7 @@ func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelN
 		if err != nil {
 			return plan, err
 		}
-		appendRouteChannels(plan, seenChannels, group, channels, userGroup, index)
+		appendRouteChannels(plan, seenChannels, group, filterRouteChannels(channels, modelName, filters), userGroup, index)
 		if !plan.FailoverEnabled && len(plan.Candidates) > 0 {
 			break
 		}
@@ -205,6 +207,22 @@ func buildAutomaticRoutePlan(c *gin.Context, plan *RoutePlan, tokenGroup, modelN
 		return plan, fmt.Errorf("没有符合密钥路由策略的可用渠道")
 	}
 	return plan, nil
+}
+
+// filterRouteChannels keeps only channels satisfying the request's channel
+// constraints, so key routing cannot pick a channel the request itself excludes
+// (for example a channel without Responses WebSocket support).
+func filterRouteChannels(channels []*model.Channel, modelName string, filters []dto.ChannelFilter) []*model.Channel {
+	if len(filters) == 0 {
+		return channels
+	}
+	kept := make([]*model.Channel, 0, len(channels))
+	for _, channel := range channels {
+		if ok, _ := model.ChannelSatisfiesFilters(channel, modelName, filters); ok {
+			kept = append(kept, channel)
+		}
+	}
+	return kept
 }
 
 func sortRouteCandidatesByPrice(candidates []RouteCandidate) {

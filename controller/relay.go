@@ -150,7 +150,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
-		if routeBillingErr := refreshTokenRouteBilling(c, relayInfo, relayInfo.GetEstimatePromptTokens(), &types.TokenCountMeta{}); routeBillingErr != nil {
+		if routeBillingErr := relay.RefreshRouteBilling(c, relayInfo); routeBillingErr != nil {
 			newAPIError = routeBillingErr
 			break
 		}
@@ -208,27 +208,6 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
 		})
 	}
-}
-
-func refreshTokenRouteBilling(c *gin.Context, relayInfo *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) *types.NewAPIError {
-	if !service.ShouldUseTokenRouting(c) || relayInfo.TieredBillingSnapshot != nil {
-		return nil
-	}
-	priceData, err := helper.ModelPriceHelper(c, relayInfo, promptTokens, meta)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
-	}
-	if !priceData.FreeModel && relayInfo.Billing == nil {
-		if apiErr := service.PreConsumeBilling(c, priceData.QuotaToPreConsume, relayInfo); apiErr != nil {
-			return apiErr
-		}
-	} else if !priceData.FreeModel {
-		if err := relayInfo.Billing.Reserve(priceData.QuotaToPreConsume); err != nil {
-			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
-		}
-	}
-	relayInfo.PriceData = priceData
-	return nil
 }
 
 // CountClaudeTokens implements Anthropic's token-counting utility endpoint.

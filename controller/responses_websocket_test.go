@@ -231,6 +231,21 @@ func TestResponsesWSRequestRunnerUsesExistingMemoryRateLimit(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
+func TestResponsesWSRequestRunnerAppliesTokenRateLimitPerCreate(t *testing.T) {
+	_, token := setupResponsesWSRequestTest(t)
+	require.NoError(t, model.DB.Model(token).Updates(map[string]any{
+		"rate_limit": 1, "rate_limit_window": 60,
+	}).Error)
+	runner, _ := newResponsesWSTestRunner(t, token)
+	called := 0
+	handle := func(*gin.Context) *types.NewAPIError { called++; return nil }
+	require.Nil(t, runner(httptest.NewRequest(http.MethodPost, "/v1/responses", nil), "first", handle))
+	apiError := runner(httptest.NewRequest(http.MethodPost, "/v1/responses", nil), "limited", handle)
+	require.NotNil(t, apiError)
+	assert.Equal(t, http.StatusTooManyRequests, apiError.StatusCode)
+	assert.Equal(t, 1, called)
+}
+
 func TestResponsesWSRequestRunnerSharesRedisSuccessLimitWithHTTP(t *testing.T) {
 	_, token := setupResponsesWSRequestTest(t)
 	redisServer := miniredis.RunT(t)

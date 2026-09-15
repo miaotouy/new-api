@@ -172,6 +172,12 @@ type RelayInfo struct {
 
 	PriceData hosttypes.PriceData
 
+	// BillingRequestMeta is the token-count metadata used to estimate this
+	// request's pre-consume charge. It is retained so the key-routing retry path
+	// can re-price with the same output-token budget (for example max_tokens)
+	// instead of recomputing a charge without it.
+	BillingRequestMeta *types.TokenCountMeta
+
 	// QuotaClamp is set (non-nil) when a quota conversion saturated at the
 	// supported single-request bound (or NaN fallback) while computing this request's charge.
 	// It is surfaced onto the consume/task log's admin_info for auditing.

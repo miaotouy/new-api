@@ -19,6 +19,8 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -101,6 +103,52 @@ func TestSelectResponsesWSChannelHonorsPinsAndFilters(t *testing.T) {
 			assert.False(t, service.ShouldRetryRelayError(c, types.NewErrorWithStatusCode(errors.New("upstream failed"), types.ErrorCodeDoRequestFailed, 503), 2))
 		})
 	}
+}
+
+func TestSelectResponsesWSChannelHonorsTokenRoutingPolicy(t *testing.T) {
+	previousUsableGroups := setting.UserUsableGroups2JSONString()
+	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	t.Cleanup(func() {
+		require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(previousUsableGroups))
+		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
+	})
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"cheap":"","expensive":""}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"cheap":0.5,"expensive":1}`))
+
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Ability{}))
+	wsEnabled := &model.Channel{Name: "cheap-ws", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "cheap", Models: "ws-model", Priority: common.GetPointer(int64(0))}
+	cheapWithoutWS := &model.Channel{Name: "cheap-no-ws", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "cheap", Models: "ws-model", Priority: common.GetPointer(int64(10))}
+	expensive := &model.Channel{Name: "expensive-ws", Key: "sk-test", Type: constant.ChannelTypeOpenAI, Status: common.ChannelStatusEnabled, Group: "expensive", Models: "ws-model", Priority: common.GetPointer(int64(10))}
+	wsEnabled.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
+	expensive.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
+	for _, channel := range []*model.Channel{wsEnabled, cheapWithoutWS, expensive} {
+		require.NoError(t, database.Create(channel).Error)
+		require.NoError(t, database.Create(&model.Ability{ChannelId: channel.Id, Model: "ws-model", Group: channel.Group, Enabled: true, Priority: channel.Priority}).Error)
+	}
+	previousCache := common.MemoryCacheEnabled
+	t.Cleanup(func() {
+		defer func() { common.MemoryCacheEnabled = previousCache }()
+		ids := []int{wsEnabled.Id, cheapWithoutWS.Id, expensive.Id}
+		require.NoError(t, database.Where("channel_id IN ?", ids).Delete(&model.Ability{}).Error)
+		require.NoError(t, database.Where("id IN ?", ids).Delete(&model.Channel{}).Error)
+		model.InitChannelCache()
+	})
+	common.MemoryCacheEnabled = true
+	model.InitChannelCache()
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	common.SetContextKey(c, constant.ContextKeyTokenRoutingConfigured, true)
+	common.SetContextKey(c, constant.ContextKeyTokenMaxRatio, 0.5)
+	common.SetContextKey(c, constant.ContextKeyTokenFailoverEnabled, true)
+	params := &service.RetryParam{Ctx: c, ModelName: "ws-model", TokenGroup: "expensive"}
+
+	channel, apiErr := selectResponsesWSChannel(c, "ws-model", params)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, channel)
+	assert.Equal(t, wsEnabled.Id, channel.Id, "channel above the key max_ratio, and non-WebSocket channels, must be skipped")
 }
 
 func TestResponsesWSChannelRoutingRequiresExplicitOptIn(t *testing.T) {

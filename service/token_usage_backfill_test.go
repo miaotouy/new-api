@@ -15,6 +15,11 @@ func newTokenUsageBackfillTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// A private in-memory database is per-connection. Pin the pool to one
+	// connection so every query in a test observes the same database.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&model.TokenUsageData{}, &model.Log{}, &model.SystemTask{}, &model.SystemTaskLock{}))
 	return db
 }
@@ -74,7 +79,11 @@ func TestRunTokenUsageBackfillIsIdempotent(t *testing.T) {
 	require.Equal(t, first.ScannedLogs, second.ScannedLogs)
 
 	var stored model.TokenUsageData
-	require.NoError(t, db.First(&stored).Error)
+	// RunTokenUsageBackfill flushes the process-wide pending cache first, so the
+	// table may contain unrelated buckets from earlier tests. Query this test's
+	// own bucket instead of the first row.
+	require.NoError(t, db.Where("user_id = ? AND username = ? AND model_name = ? AND created_at = ?",
+		1, "alice", "model-a", start).First(&stored).Error)
 	require.Equal(t, 150, stored.InputTokens)
 	require.Equal(t, 35, stored.OutputTokens)
 	require.Equal(t, 40, stored.CachedTokens)
@@ -104,7 +113,8 @@ func TestRunTokenUsageBackfillAggregatesAcrossBatches(t *testing.T) {
 	require.Equal(t, int64(tokenUsageBackfillBatch+1), result.ScannedLogs)
 
 	var stored model.TokenUsageData
-	require.NoError(t, db.First(&stored).Error)
+	require.NoError(t, db.Where("user_id = ? AND username = ? AND model_name = ? AND created_at = ?",
+		1, "alice", "model-a", start).First(&stored).Error)
 	require.Equal(t, tokenUsageBackfillBatch+1, stored.InputTokens)
 	require.Equal(t, (tokenUsageBackfillBatch+1)*2, stored.OutputTokens)
 	require.Equal(t, tokenUsageBackfillBatch+1, stored.CachedTokens)

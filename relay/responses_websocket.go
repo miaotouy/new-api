@@ -277,6 +277,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				billingPrepared = true
 			} else {
 				info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+				if apiErr = RefreshRouteBilling(c, info); apiErr != nil {
+					return apiErr
+				}
 				if apiErr = service.PrepareTieredBillingForSelectedGroup(c, info); apiErr != nil {
 					return apiErr
 				}
@@ -854,6 +857,30 @@ func selectResponsesWSChannel(c *gin.Context, modelName string, retryParam *serv
 	usingGroup := common.GetContextKeyString(c, appconstant.ContextKeyUsingGroup)
 	if usingGroup == "" {
 		usingGroup = retryParam.TokenGroup
+	}
+
+	if service.ShouldUseTokenRouting(c) {
+		var (
+			channel     *appmodel.Channel
+			selectGroup string
+			err         error
+		)
+		if retryParam.GetRetry() == 0 {
+			channel, selectGroup, err = service.SelectTokenRouteChannel(c, usingGroup, modelName, c.Request.URL.Path)
+		} else {
+			channel, selectGroup, err = service.SelectNextTokenRouteChannel(c, retryParam.GetRetry())
+		}
+		if err != nil {
+			return nil, types.NewError(err, types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		if channel == nil {
+			return nil, types.NewError(fmt.Errorf("密钥路由候选已耗尽（分组 %s）", selectGroup), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+		}
+		common.SetContextKey(c, appconstant.ContextKeyAutoGroup, selectGroup)
+		if err := middleware.SetupContextForSelectedChannel(c, channel, modelName); err != nil {
+			return nil, err
+		}
+		return channel, nil
 	}
 
 	if retryParam.GetRetry() == 0 {

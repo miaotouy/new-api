@@ -40,6 +40,8 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 		}
 	}
 
+	info.BillingRequestMeta = meta
+
 	if needSensitiveCheck && meta != nil {
 		if contains, words := service.CheckSensitiveText(meta.CombineText); contains {
 			message := fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", "))
@@ -63,6 +65,35 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 		return nil
 	}
 	return service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info)
+}
+
+// RefreshRouteBilling re-prices an existing attempt for the group key routing
+// selected. It must run after PrepareRequestBilling created the billing session
+// and only tops up an existing reservation, so re-pricing the same group is a
+// no-op. Tiered billing owns its snapshot and is skipped here.
+func RefreshRouteBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
+	if !service.ShouldUseTokenRouting(c) || info.TieredBillingSnapshot != nil {
+		return nil
+	}
+	meta := info.BillingRequestMeta
+	if meta == nil {
+		meta = &types.TokenCountMeta{}
+	}
+	priceData, err := helper.ModelPriceHelper(c, info, info.GetEstimatePromptTokens(), meta)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest))
+	}
+	if !priceData.FreeModel && info.Billing == nil {
+		if apiErr := service.PreConsumeBilling(c, priceData.QuotaToPreConsume, info); apiErr != nil {
+			return apiErr
+		}
+	} else if !priceData.FreeModel {
+		if err := info.Billing.Reserve(priceData.QuotaToPreConsume); err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodePreConsumeTokenQuotaFailed, http.StatusForbidden, types.ErrOptionWithSkipRetry())
+		}
+	}
+	info.PriceData = priceData
+	return nil
 }
 
 // RefundFailedRequestBilling applies the common final-failure policy after all
