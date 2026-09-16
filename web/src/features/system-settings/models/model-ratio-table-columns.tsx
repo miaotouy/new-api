@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
-import { ClipboardPaste, Copy } from 'lucide-react'
 
 import { DataTableColumnHeader } from '@/components/data-table/core/column-header'
 import { StaticRowActions } from '@/components/data-table/static/static-row-actions'
@@ -45,9 +44,6 @@ const filterBySelectedValues = (
 type BuildModelRatioColumnsOptions = {
   onDelete: (name: string) => void
   onEdit: (model: ModelRow) => void
-  onCopy?: (model: ModelRow) => void
-  onPaste?: (model: ModelRow) => void
-  pasteSourceName?: string
   deleteDisabled?: boolean
   taskModelNames?: Set<string>
   t: (key: string, options?: Record<string, unknown>) => string
@@ -56,9 +52,6 @@ type BuildModelRatioColumnsOptions = {
 export function buildModelRatioColumns({
   onDelete,
   onEdit,
-  onCopy,
-  onPaste,
-  pasteSourceName,
   deleteDisabled,
   taskModelNames,
   t,
@@ -205,28 +198,6 @@ export function buildModelRatioColumns({
           onEdit={() => onEdit(row.original)}
           onDelete={() => onDelete(row.original.name)}
           deleteDisabled={deleteDisabled}
-          additionalActions={[
-            ...(onCopy
-              ? [
-                  {
-                    label: t('Copy pricing configuration'),
-                    onSelect: () => onCopy(row.original),
-                    icon: <Copy size={16} />,
-                  },
-                ]
-              : []),
-            ...(onPaste && pasteSourceName
-              ? [
-                  {
-                    label: t('Paste {{name}} pricing', {
-                      name: pasteSourceName,
-                    }),
-                    onSelect: () => onPaste(row.original),
-                    icon: <ClipboardPaste size={16} />,
-                  },
-                ]
-              : []),
-          ]}
         />
       ),
       enableHiding: false,

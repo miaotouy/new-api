@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Save } from 'lucide-react'
+import { AlertTriangle, ClipboardPaste, Copy, Save } from 'lucide-react'
 import {
   forwardRef,
   useCallback,
@@ -32,6 +32,7 @@ import {
 } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { sideDrawerContentClassName } from '@/components/drawer-layout'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -119,6 +120,8 @@ type ModelPricingSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   editData?: ModelRatioData | null
+  copiedPricing?: ModelRatioData | null
+  onCopyPricing?: (pricing: ModelRatioData) => void
   onSave?: () => void | Promise<void>
   isSaving?: boolean
   usageSchema?: BillingUsageSchema
@@ -141,6 +144,33 @@ export type ModelPricingEditorPanelHandle = {
 
 const DEFAULT_TOKEN_BILLING_EXPR = 'tier("base", p * 0 + c * 0)'
 
+const resolveInitialPricing = (data?: ModelRatioData | null) => {
+  const hasLegacyPricing =
+    Boolean(data) &&
+    [
+      data?.price,
+      data?.ratio,
+      data?.completionRatio,
+      data?.cacheRatio,
+      data?.createCacheRatio,
+      data?.imageRatio,
+      data?.audioRatio,
+      data?.audioCompletionRatio,
+    ].some(hasValue)
+
+  let mode: PricingMode = 'tiered_expr'
+  if (data?.billingMode !== 'tiered_expr' && hasLegacyPricing) {
+    mode = hasValue(data?.price) ? 'per-request' : 'per-token'
+  }
+
+  return {
+    mode,
+    expr:
+      data?.billingExpr ||
+      (mode === 'tiered_expr' ? DEFAULT_TOKEN_BILLING_EXPR : ''),
+  }
+}
+
 export const ModelPricingSheet = forwardRef<
   ModelPricingEditorPanelHandle,
   ModelPricingSheetProps
@@ -149,6 +179,8 @@ export const ModelPricingSheet = forwardRef<
     open,
     onOpenChange,
     editData,
+    copiedPricing,
+    onCopyPricing,
     onSave,
     isSaving,
     usageSchema,
@@ -174,6 +206,8 @@ export const ModelPricingSheet = forwardRef<
         <ModelPricingEditorPanel
           ref={ref}
           editData={editData}
+          copiedPricing={copiedPricing}
+          onCopyPricing={onCopyPricing}
           usageSchema={usageSchema}
           pluginVariants={pluginVariants}
           onDirtyChange={onDirtyChange}
@@ -192,6 +226,8 @@ export const ModelPricingEditorPanel = forwardRef<
 >(function ModelPricingEditorPanel(
   {
     editData,
+    copiedPricing,
+    onCopyPricing,
     className,
     onSave,
     isSaving,
@@ -241,25 +277,8 @@ export const ModelPricingEditorPanel = forwardRef<
   const [editorReloadToken, setEditorReloadToken] = useState(0)
   const autoSwitchedForRef = useRef<string | null>(null)
   const isEditMode = !!editData
-  const hasLegacyPricing =
-    editData &&
-    [
-      editData.price,
-      editData.ratio,
-      editData.completionRatio,
-      editData.cacheRatio,
-      editData.createCacheRatio,
-      editData.imageRatio,
-      editData.audioRatio,
-      editData.audioCompletionRatio,
-    ].some(hasValue)
-  let initialPricingMode: PricingMode = 'tiered_expr'
-  if (editData?.billingMode !== 'tiered_expr' && hasLegacyPricing) {
-    initialPricingMode = hasValue(editData?.price) ? 'per-request' : 'per-token'
-  }
-  const initialBillingExpr =
-    editData?.billingExpr ||
-    (initialPricingMode === 'tiered_expr' ? DEFAULT_TOKEN_BILLING_EXPR : '')
+  const { mode: initialPricingMode, expr: initialBillingExpr } =
+    resolveInitialPricing(editData)
   const { models: pricingModels } = usePricingData()
 
   const form = useForm<ModelPricingFormValues>({
@@ -347,52 +366,41 @@ export const ModelPricingEditorPanel = forwardRef<
       ? defaultTaskBillingExpr
       : billingExpr
 
+  const hydratePricing = useCallback(
+    (data: ModelRatioData | null, mode: PricingMode, expr: string) => {
+      conversionGeneration.current += 1
+      setConversionReason('')
+      setPluginExpressions(data?.pluginBillingExpr ?? {})
+      setWasConverted(false)
+      setConversionPreview(null)
+      const nextLaneState = createInitialLaneState(data)
+
+      form.reset({
+        name: data?.name ?? '',
+        price: data?.price || '',
+        ratio: data?.ratio || '',
+        cacheRatio: data?.cacheRatio || '',
+        createCacheRatio: data?.createCacheRatio || '',
+        completionRatio: data?.completionRatio || '',
+        imageRatio: data?.imageRatio || '',
+        audioRatio: data?.audioRatio || '',
+        audioCompletionRatio: data?.audioCompletionRatio || '',
+      })
+      setPricingMode(mode)
+      setBillingExpr(expr)
+      setRequestRuleExpr(data?.requestRuleExpr || '')
+      setPromptPrice(nextLaneState.promptPrice)
+      setLanePrices(nextLaneState.prices)
+      setLaneEnabled(nextLaneState.enabled)
+      setEditorReloadToken((token) => token + 1)
+      autoSwitchedForRef.current = null
+    },
+    [form]
+  )
+
   useEffect(() => {
-    conversionGeneration.current += 1
-    setConversionReason('')
-    setPluginExpressions(editData?.pluginBillingExpr ?? {})
-    setWasConverted(false)
-    setConversionPreview(null)
-    const nextLaneState = createInitialLaneState(editData)
-
-    if (editData) {
-      form.reset({
-        name: editData.name,
-        price: editData.price || '',
-        ratio: editData.ratio || '',
-        cacheRatio: editData.cacheRatio || '',
-        createCacheRatio: editData.createCacheRatio || '',
-        completionRatio: editData.completionRatio || '',
-        imageRatio: editData.imageRatio || '',
-        audioRatio: editData.audioRatio || '',
-        audioCompletionRatio: editData.audioCompletionRatio || '',
-      })
-      setPricingMode(initialPricingMode)
-      setBillingExpr(initialBillingExpr)
-      setRequestRuleExpr(editData.requestRuleExpr || '')
-    } else {
-      form.reset({
-        name: '',
-        price: '',
-        ratio: '',
-        cacheRatio: '',
-        createCacheRatio: '',
-        completionRatio: '',
-        imageRatio: '',
-        audioRatio: '',
-        audioCompletionRatio: '',
-      })
-      setPricingMode('tiered_expr')
-      setBillingExpr(DEFAULT_TOKEN_BILLING_EXPR)
-      setRequestRuleExpr('')
-    }
-
-    setPromptPrice(nextLaneState.promptPrice)
-    setLanePrices(nextLaneState.prices)
-    setLaneEnabled(nextLaneState.enabled)
-    setEditorReloadToken((token) => token + 1)
-    autoSwitchedForRef.current = null
-  }, [editData, form, initialPricingMode, initialBillingExpr])
+    hydratePricing(editData ?? null, initialPricingMode, initialBillingExpr)
+  }, [editData, hydratePricing, initialPricingMode, initialBillingExpr])
 
   useEffect(() => {
     if (!editData) return
@@ -782,29 +790,46 @@ export const ModelPricingEditorPanel = forwardRef<
     setEditorReloadToken((token) => token + 1)
   }
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      commitDraft: async () => {
-        if (
-          formElementRef.current?.querySelector('[data-billing-invalid="true"]')
-        ) {
-          return null
-        }
-        const amounts =
-          formElementRef.current?.querySelectorAll<HTMLInputElement>(
-            'input[data-pricing-amount]'
-          )
-        if (amounts && [...amounts].some((input) => !input.reportValidity())) {
-          return null
-        }
-        const isValid = await form.trigger()
-        if (!isValid || !validatePricingValues()) return null
-        return buildSubmitData(form.getValues())
-      },
-    }),
-    [form, validatePricingValues, buildSubmitData]
-  )
+  const buildDraft = useCallback(async () => {
+    if (
+      formElementRef.current?.querySelector('[data-billing-invalid="true"]')
+    ) {
+      return null
+    }
+    const amounts = formElementRef.current?.querySelectorAll<HTMLInputElement>(
+      'input[data-pricing-amount]'
+    )
+    if (amounts && [...amounts].some((input) => !input.reportValidity())) {
+      return null
+    }
+    const isValid = await form.trigger()
+    if (!isValid || !validatePricingValues()) return null
+    return buildSubmitData(form.getValues())
+  }, [buildSubmitData, form, validatePricingValues])
+
+  useImperativeHandle(ref, () => ({ commitDraft: buildDraft }), [buildDraft])
+
+  const handleCopyPricing = async () => {
+    const draft = await buildDraft()
+    if (!draft) return
+    onCopyPricing?.(draft)
+    toast.success(
+      t('Copied {{name}} pricing configuration', { name: draft.name })
+    )
+  }
+
+  const handlePastePricing = () => {
+    if (!copiedPricing) return
+    const target: ModelRatioData = {
+      ...copiedPricing,
+      name: form.getValues().name.trim() || editData?.name || '',
+    }
+    const { mode, expr } = resolveInitialPricing(target)
+    hydratePricing(target, mode, expr)
+    toast.success(
+      t('Pasted {{name}} pricing configuration', { name: copiedPricing.name })
+    )
+  }
 
   const expressionEditor = taskUsageSchema ? (
     <TaskUsagePricingEditor
@@ -829,7 +854,7 @@ export const ModelPricingEditorPanel = forwardRef<
     />
   )
 
-  const showActions = Boolean(onSave)
+  const showActions = Boolean(onSave || onCopyPricing || copiedPricing)
 
   return (
     <div
@@ -1187,6 +1212,28 @@ export const ModelPricingEditorPanel = forwardRef<
           {showActions && (
             <div className='bg-background/95 supports-[backdrop-filter]:bg-background/80 shrink-0 border-t p-3 backdrop-blur'>
               <div className='flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'>
+                {onCopyPricing && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    onClick={handleCopyPricing}
+                    className='w-full sm:w-auto'
+                  >
+                    <Copy data-icon='inline-start' />
+                    {t('Copy pricing configuration')}
+                  </Button>
+                )}
+                {copiedPricing && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    onClick={handlePastePricing}
+                    className='w-full sm:w-auto'
+                  >
+                    <ClipboardPaste data-icon='inline-start' />
+                    {t('Paste {{name}} pricing', { name: copiedPricing.name })}
+                  </Button>
+                )}
                 {onSave && (
                   <Button
                     type='button'
