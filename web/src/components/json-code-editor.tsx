@@ -52,6 +52,7 @@ export type JsonCodeEditorProps = Omit<
   onBlur?: () => void
   textareaRef?: (element: HTMLTextAreaElement | null) => void
   disabled?: boolean
+  readOnly?: boolean
   heightClassName?: string
   placeholder?: string
   ariaLabel?: string
@@ -65,6 +66,7 @@ export function JsonCodeEditor({
   onBlur,
   textareaRef,
   disabled,
+  readOnly,
   heightClassName = 'h-56 min-h-56 max-h-56',
   placeholder,
   ariaLabel,
@@ -199,6 +201,7 @@ export function JsonCodeEditor({
     const resolvedAriaInvalid = ariaInvalid ?? !jsonStatus.isValid
 
     editor.textarea.disabled = Boolean(disabled)
+    editor.textarea.readOnly = Boolean(readOnly)
     editor.textarea.id = id ?? ''
     editor.textarea.name = name ?? ''
 
@@ -236,6 +239,7 @@ export function JsonCodeEditor({
     ariaInvalid,
     ariaLabel,
     disabled,
+    readOnly,
     dataFormRoot,
     id,
     jsonStatus.isValid,

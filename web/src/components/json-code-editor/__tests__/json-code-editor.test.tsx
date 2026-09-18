@@ -27,7 +27,7 @@ describe('JsonCodeEditor component', () => {
     const textareaRef = vi.fn()
     const rendered = render(
       <JsonCodeEditor
-        value='{"model":"gpt"}'
+        value='{}'
         onChange={() => undefined}
         id='json-input'
         name='model_config'
@@ -55,6 +55,23 @@ describe('JsonCodeEditor component', () => {
 
     rendered.unmount()
     expect(textareaRef).toHaveBeenLastCalledWith(null)
+  })
+
+  test('supports a read-only editor without disabling selection', () => {
+    render(
+      <JsonCodeEditor
+        value='{"model":"gpt"}'
+        onChange={() => undefined}
+        readOnly
+        ariaLabel='Read-only model configuration'
+      />
+    )
+
+    const textarea = screen.getByRole('textbox', {
+      name: 'Read-only model configuration',
+    })
+    expect(textarea).toHaveAttribute('readonly')
+    expect(textarea).not.toBeDisabled()
   })
 
   test('calls onBlur when focus leaves the editor', () => {

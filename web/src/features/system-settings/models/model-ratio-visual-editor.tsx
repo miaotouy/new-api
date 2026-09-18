@@ -24,7 +24,7 @@ import type {
   VisibilityState,
   SortingState,
 } from '@tanstack/react-table'
-import { Copy, Plus } from 'lucide-react'
+import { Copy, FileJson, Plus, Upload } from 'lucide-react'
 import {
   useState,
   useMemo,
@@ -57,6 +57,10 @@ import { splitPluginBillingExprKey } from '@/features/pricing/lib/plugin-pricing
 import { useMediaQuery } from '@/hooks'
 
 import { safeJsonParse } from '../utils/json-parser'
+import {
+  CodexPricingExportDialog,
+  CodexPricingImportDialog,
+} from './model-pricing-codex-dialog'
 import type { PricingMode } from './model-pricing-core'
 import {
   ModelPricingEditorPanel,
@@ -69,6 +73,7 @@ import {
   getSnapshotSignature,
   isBasePricingUnset,
   type ModelRow,
+  type ModelPricingSnapshot,
 } from './model-pricing-snapshots'
 import {
   buildModelRatioColumns,
@@ -157,6 +162,11 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const isMobile = useMediaQuery('(max-width: 767px)')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
+  const [codexExportOpen, setCodexExportOpen] = useState(false)
+  const [codexImportOpen, setCodexImportOpen] = useState(false)
+  const [codexExportSnapshots, setCodexExportSnapshots] = useState<
+    ModelPricingSnapshot[]
+  >([])
   const [editData, setEditData] = useState<ModelRatioData | null>(null)
   const pricingConfig = useModelPricing(
     editData?.name ? [editData.name] : [],
@@ -223,8 +233,20 @@ const ModelRatioVisualEditorComponent = forwardRef<
       ),
     [pricingModels]
   )
+  const usageSchemas = useMemo(
+    () =>
+      new Map(
+        pricingModels.flatMap((model) => {
+          const schema = model.billing_usage_schema
+          return schema && Object.keys(schema).length > 0
+            ? [[model.model_name, schema] as const]
+            : []
+        })
+      ),
+    [pricingModels]
+  )
 
-  const models = useMemo(() => {
+  const snapshotState = useMemo(() => {
     const savedRows = buildModelSnapshots({
       modelPrice: savedModelPrice,
       modelRatio: savedModelRatio,
@@ -252,8 +274,37 @@ const ModelRatioVisualEditorComponent = forwardRef<
       pluginBillingExpr,
     })
 
-    const savedByName = new Map(savedRows.map((row) => [row.name, row]))
-    const draftByName = new Map(draftRows.map((row) => [row.name, row]))
+    return {
+      savedByName: new Map(savedRows.map((row) => [row.name, row])),
+      draftByName: new Map(draftRows.map((row) => [row.name, row])),
+    }
+  }, [
+    savedModelPrice,
+    savedModelRatio,
+    savedCacheRatio,
+    savedCreateCacheRatio,
+    savedCompletionRatio,
+    savedImageRatio,
+    savedAudioRatio,
+    savedAudioCompletionRatio,
+    savedBillingMode,
+    savedBillingExpr,
+    savedPluginBillingExpr,
+    modelPrice,
+    modelRatio,
+    cacheRatio,
+    createCacheRatio,
+    completionRatio,
+    imageRatio,
+    audioRatio,
+    audioCompletionRatio,
+    billingMode,
+    billingExpr,
+    pluginBillingExpr,
+  ])
+
+  const models = useMemo(() => {
+    const { savedByName, draftByName } = snapshotState
     const modelNames =
       filterMode === 'unset'
         ? new Set(candidateModelNames ?? [])
@@ -280,32 +331,7 @@ const ModelRatioVisualEditorComponent = forwardRef<
       .filter((row) => !row.isDraftDeleted)
       .filter((row) => filterMode !== 'unset' || isBasePricingUnset(row.saved))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [
-    candidateModelNames,
-    filterMode,
-    savedModelPrice,
-    savedModelRatio,
-    savedCacheRatio,
-    savedCreateCacheRatio,
-    savedCompletionRatio,
-    savedImageRatio,
-    savedAudioRatio,
-    savedAudioCompletionRatio,
-    savedBillingMode,
-    savedBillingExpr,
-    savedPluginBillingExpr,
-    modelPrice,
-    modelRatio,
-    cacheRatio,
-    createCacheRatio,
-    completionRatio,
-    imageRatio,
-    audioRatio,
-    audioCompletionRatio,
-    billingMode,
-    billingExpr,
-    pluginBillingExpr,
-  ])
+  }, [candidateModelNames, filterMode, snapshotState])
 
   const modeCounts = useMemo(() => {
     const counts = {
@@ -535,6 +561,52 @@ const ModelRatioVisualEditorComponent = forwardRef<
     ]
   )
 
+  const persistPricingDrafts = useCallback(
+    (drafts: ModelRatioData[]) => {
+      let updated = pricingOptions({
+        ModelPrice: modelPrice,
+        ModelRatio: modelRatio,
+        CompletionRatio: completionRatio,
+        CacheRatio: cacheRatio,
+        CreateCacheRatio: createCacheRatio,
+        ImageRatio: imageRatio,
+        AudioRatio: audioRatio,
+        AudioCompletionRatio: audioCompletionRatio,
+        BillingMode: billingMode,
+        BillingExpr: billingExpr,
+        PluginBillingExpr: pluginBillingExpr,
+      })
+      for (const draft of drafts) updated = applyPricingDraft(updated, draft)
+      for (const [key, value] of Object.entries(updated)) onChange(key, value)
+
+      const openDraft = drafts.find((draft) => draft.name === editData?.name)
+      if (openDraft) {
+        setEditData({
+          ...openDraft,
+          ...(editData?.pluginBillingExpr === undefined
+            ? {}
+            : { pluginBillingExpr: editData.pluginBillingExpr }),
+        })
+      }
+    },
+    [
+      modelPrice,
+      modelRatio,
+      completionRatio,
+      cacheRatio,
+      createCacheRatio,
+      imageRatio,
+      audioRatio,
+      audioCompletionRatio,
+      billingMode,
+      billingExpr,
+      pluginBillingExpr,
+      onChange,
+      editData?.name,
+      editData?.pluginBillingExpr,
+    ]
+  )
+
   const columns = useMemo(
     () =>
       buildModelRatioColumns({
@@ -625,6 +697,36 @@ const ModelRatioVisualEditorComponent = forwardRef<
   )
 
   const hasRows = table.getRowModel().rows.length > 0
+  const currentSnapshots = useMemo(() => {
+    const { savedByName, draftByName } = snapshotState
+    const modelNames = new Set([
+      ...savedByName.keys(),
+      ...draftByName.keys(),
+      ...(candidateModelNames ?? []),
+    ])
+    return new Map(
+      [...modelNames].map((name) => [
+        name,
+        draftByName.get(name) ??
+          savedByName.get(name) ?? {
+            name,
+            billingMode: 'per-token',
+            hasConflict: false,
+          },
+      ])
+    )
+  }, [candidateModelNames, snapshotState])
+
+  const handleCodexExport = () => {
+    setCodexExportSnapshots(
+      table
+        .getFilteredSelectedRowModel()
+        .rows.map(
+          (row) => row.original.draft ?? row.original.saved ?? row.original
+        )
+    )
+    setCodexExportOpen(true)
+  }
 
   let emptyStateText = t('No models configured. Use Add model to get started.')
   if (table.getState().globalFilter) {
@@ -676,12 +778,21 @@ const ModelRatioVisualEditorComponent = forwardRef<
               },
             ]}
             preActions={
-              filterMode === 'unset' ? undefined : (
-                <Button onClick={handleAdd}>
-                  <Plus data-icon='inline-start' />
-                  {t('Add model')}
+              <>
+                <Button
+                  variant='outline'
+                  onClick={() => setCodexImportOpen(true)}
+                >
+                  <Upload data-icon='inline-start' />
+                  {t('Import Codex pricing')}
                 </Button>
-              )
+                {filterMode !== 'unset' && (
+                  <Button onClick={handleAdd}>
+                    <Plus data-icon='inline-start' />
+                    {t('Add model')}
+                  </Button>
+                )}
+              </>
             }
           />
 
@@ -785,10 +896,16 @@ const ModelRatioVisualEditorComponent = forwardRef<
       </div>
 
       <DataTableBulkActions table={table} entityName={t('model')}>
+        <Button size='sm' variant='outline' onClick={handleCodexExport}>
+          <FileJson data-icon='inline-start' />
+          {t('Send selected models to Codex')}
+        </Button>
         <Button size='sm' disabled={!editData} onClick={handleBatchCopy}>
           <Copy data-icon='inline-start' />
           {editData
-            ? t('Copy {{name}} pricing', { name: editData.name })
+            ? t('Apply {{name}} pricing to selected models', {
+                name: editData.name,
+              })
             : t('Open a source model first')}
         </Button>
       </DataTableBulkActions>
@@ -815,6 +932,19 @@ const ModelRatioVisualEditorComponent = forwardRef<
           isSaving={isSaving}
         />
       )}
+      <CodexPricingExportDialog
+        open={codexExportOpen}
+        onOpenChange={setCodexExportOpen}
+        snapshots={codexExportSnapshots}
+        usageSchemas={usageSchemas}
+      />
+      <CodexPricingImportDialog
+        open={codexImportOpen}
+        onOpenChange={setCodexImportOpen}
+        currentSnapshots={currentSnapshots}
+        usageSchemas={usageSchemas}
+        onApply={persistPricingDrafts}
+      />
     </div>
   )
 })
