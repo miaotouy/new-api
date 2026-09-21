@@ -187,8 +187,10 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
     setValue(next)
     setIncludedExtra(new Set())
   }
-  const hasErrors =
-    Boolean(parseError) || preview.some((item) => item.status === 'error')
+  const hasErrors = Boolean(parseError)
+  const skippedCount = preview.filter(
+    (item) => item.status === 'error' || item.status === 'unresolved'
+  ).length
   const drafts = preview
     .filter(
       (item) =>
@@ -349,10 +351,12 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
             </Table>
           </div>
         )}
-        {hasErrors && !parseError && (
-          <Alert variant='destructive'>
+        {skippedCount > 0 && !parseError && drafts.length > 0 && (
+          <Alert>
             <AlertDescription>
-              {t('Fix all errors before applying.')}
+              {t('Some entries will be skipped because no valid pricing was found.', {
+                count: skippedCount,
+              })}
             </AlertDescription>
           </Alert>
         )}
