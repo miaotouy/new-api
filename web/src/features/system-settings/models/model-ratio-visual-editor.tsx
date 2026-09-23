@@ -57,11 +57,11 @@ import { splitPluginBillingExprKey } from '@/features/pricing/lib/plugin-pricing
 import { useMediaQuery } from '@/hooks'
 
 import { safeJsonParse } from '../utils/json-parser'
-import {
-  CodexPricingExportDialog,
-  CodexPricingImportDialog,
-} from './model-pricing-codex-dialog'
 import type { PricingMode } from './model-pricing-core'
+import {
+  PricingExportDialog,
+  PricingImportDialog,
+} from './model-pricing-handoff-dialog'
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
@@ -162,9 +162,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
   const isMobile = useMediaQuery('(max-width: 767px)')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
-  const [codexExportOpen, setCodexExportOpen] = useState(false)
-  const [codexImportOpen, setCodexImportOpen] = useState(false)
-  const [codexExportSnapshots, setCodexExportSnapshots] = useState<
+  const [pricingExportOpen, setPricingExportOpen] = useState(false)
+  const [pricingImportOpen, setPricingImportOpen] = useState(false)
+  const [pricingExportSnapshots, setPricingExportSnapshots] = useState<
     ModelPricingSnapshot[]
   >([])
   const [editData, setEditData] = useState<ModelRatioData | null>(null)
@@ -717,15 +717,15 @@ const ModelRatioVisualEditorComponent = forwardRef<
     )
   }, [candidateModelNames, snapshotState])
 
-  const handleCodexExport = () => {
-    setCodexExportSnapshots(
+  const handlePricingExport = () => {
+    setPricingExportSnapshots(
       table
         .getFilteredSelectedRowModel()
         .rows.map(
           (row) => row.original.draft ?? row.original.saved ?? row.original
         )
     )
-    setCodexExportOpen(true)
+    setPricingExportOpen(true)
   }
 
   let emptyStateText = t('No models configured. Use Add model to get started.')
@@ -781,10 +781,10 @@ const ModelRatioVisualEditorComponent = forwardRef<
               <>
                 <Button
                   variant='outline'
-                  onClick={() => setCodexImportOpen(true)}
+                  onClick={() => setPricingImportOpen(true)}
                 >
                   <Upload data-icon='inline-start' />
-                  {t('Import Codex pricing')}
+                  {t('Import model pricing')}
                 </Button>
                 {filterMode !== 'unset' && (
                   <Button onClick={handleAdd}>
@@ -896,9 +896,9 @@ const ModelRatioVisualEditorComponent = forwardRef<
       </div>
 
       <DataTableBulkActions table={table} entityName={t('model')}>
-        <Button size='sm' variant='outline' onClick={handleCodexExport}>
+        <Button size='sm' variant='outline' onClick={handlePricingExport}>
           <FileJson data-icon='inline-start' />
-          {t('Send selected models to Codex')}
+          {t('Send selected models to an agent')}
         </Button>
         <Button size='sm' disabled={!editData} onClick={handleBatchCopy}>
           <Copy data-icon='inline-start' />
@@ -932,15 +932,15 @@ const ModelRatioVisualEditorComponent = forwardRef<
           isSaving={isSaving}
         />
       )}
-      <CodexPricingExportDialog
-        open={codexExportOpen}
-        onOpenChange={setCodexExportOpen}
-        snapshots={codexExportSnapshots}
+      <PricingExportDialog
+        open={pricingExportOpen}
+        onOpenChange={setPricingExportOpen}
+        snapshots={pricingExportSnapshots}
         usageSchemas={usageSchemas}
       />
-      <CodexPricingImportDialog
-        open={codexImportOpen}
-        onOpenChange={setCodexImportOpen}
+      <PricingImportDialog
+        open={pricingImportOpen}
+        onOpenChange={setPricingImportOpen}
         currentSnapshots={currentSnapshots}
         usageSchemas={usageSchemas}
         onApply={persistPricingDrafts}

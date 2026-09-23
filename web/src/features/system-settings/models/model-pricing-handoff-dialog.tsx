@@ -38,15 +38,15 @@ import {
 } from '@/components/ui/table'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 
-import {
-  buildCodexImportPreview,
-  buildCodexPricingPrompt,
-  createCodexPricingDocument,
-  serializeCodexPricingDocument,
-  type CodexImportPreview,
-  type CodexPricingValue,
-} from './model-pricing-codex'
 import type { ModelRatioData } from './model-pricing-core'
+import {
+  buildImportPreview,
+  buildPricingPrompt,
+  createPricingDocument,
+  serializePricingDocument,
+  type ImportPreview,
+  type PricingValue,
+} from './model-pricing-handoff'
 import type { ModelPricingSnapshot } from './model-pricing-snapshots'
 
 const MAX_JSON_FILE_SIZE = 1024 * 1024
@@ -63,7 +63,7 @@ function readJsonFile(file: File): Promise<string> {
   })
 }
 
-function formatPricingValue(value: CodexPricingValue): string {
+function formatPricingValue(value: PricingValue): string {
   if (value === null) return 'null'
   if (typeof value === 'string') return value
   return JSON.stringify(value)
@@ -80,39 +80,36 @@ function downloadJson(content: string): void {
     String(date.getDate()).padStart(2, '0'),
   ].join('-')
   link.href = url
-  link.download = `model-pricing-codex-${day}.json`
+  link.download = `model-pricing-handoff-${day}.json`
   document.body.append(link)
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
 }
 
-type CodexPricingExportDialogProps = {
+type PricingExportDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   snapshots: ModelPricingSnapshot[]
   usageSchemas: ReadonlyMap<string, BillingUsageSchema>
 }
 
-export function CodexPricingExportDialog(props: CodexPricingExportDialogProps) {
+export function PricingExportDialog(props: PricingExportDialogProps) {
   const { t } = useTranslation()
   const document = useMemo(
-    () => createCodexPricingDocument(props.snapshots, props.usageSchemas),
+    () => createPricingDocument(props.snapshots, props.usageSchemas),
     [props.snapshots, props.usageSchemas]
   )
-  const json = useMemo(
-    () => serializeCodexPricingDocument(document),
-    [document]
-  )
-  const prompt = useMemo(() => buildCodexPricingPrompt(document), [document])
+  const json = useMemo(() => serializePricingDocument(document), [document])
+  const prompt = useMemo(() => buildPricingPrompt(document), [document])
 
   return (
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title={t('Codex pricing export')}
+      title={t('Export model pricing')}
       description={t(
-        'Use this compact JSON with Codex to research and complete model pricing.'
+        'Use this compact JSON with an AI agent to research and complete model pricing.'
       )}
       contentClassName='sm:max-w-4xl'
       contentHeight='min(66vh, 620px)'
@@ -132,11 +129,11 @@ export function CodexPricingExportDialog(props: CodexPricingExportDialogProps) {
             value={prompt}
             variant='outline'
             size='default'
-            tooltip={t('Copy Codex prompt')}
-            successTooltip={t('Codex prompt copied to clipboard')}
-            aria-label={t('Copy Codex prompt')}
+            tooltip={t('Copy agent prompt')}
+            successTooltip={t('Agent prompt copied to clipboard')}
+            aria-label={t('Copy agent prompt')}
           >
-            {t('Copy Codex prompt')}
+            {t('Copy agent prompt')}
           </CopyButton>
           <Button onClick={() => downloadJson(json)}>
             <Download data-icon='inline-start' />
@@ -149,14 +146,14 @@ export function CodexPricingExportDialog(props: CodexPricingExportDialogProps) {
         value={json}
         onChange={() => undefined}
         readOnly
-        ariaLabel={t('Codex pricing JSON')}
+        ariaLabel={t('Model pricing JSON')}
         heightClassName='h-full min-h-96 max-h-none'
       />
     </Dialog>
   )
 }
 
-type CodexPricingImportDialogProps = {
+type PricingImportDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   currentSnapshots: ReadonlyMap<string, ModelPricingSnapshot>
@@ -164,16 +161,16 @@ type CodexPricingImportDialogProps = {
   onApply: (drafts: ModelRatioData[]) => void
 }
 
-export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
+export function PricingImportDialog(props: PricingImportDialogProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const [value, setValue] = useState('')
   const [includedExtra, setIncludedExtra] = useState<Set<string>>(new Set())
-  let preview: CodexImportPreview[] = []
+  let preview: ImportPreview[] = []
   let parseError = ''
   if (value.trim()) {
     try {
-      preview = buildCodexImportPreview(
+      preview = buildImportPreview(
         value,
         props.currentSnapshots,
         props.usageSchemas
@@ -200,7 +197,7 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
     )
     .map((item) => item.draft as ModelRatioData)
 
-  const statusLabel = (status: CodexImportPreview['status']) => {
+  const statusLabel = (status: ImportPreview['status']) => {
     if (status === 'unchanged') return t('Unchanged')
     if (status === 'new') return t('New expression')
     if (status === 'update') return t('Updated pricing')
@@ -234,9 +231,9 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title={t('Import Codex pricing')}
+      title={t('Import model pricing')}
       description={t(
-        'Paste the JSON returned by Codex or upload a .json file.'
+        'Paste the JSON returned by an agent or upload a .json file.'
       )}
       contentClassName='sm:max-w-5xl'
       contentHeight='min(72vh, 720px)'
@@ -279,14 +276,14 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
         <JsonCodeEditor
           value={value}
           onChange={updateValue}
-          ariaLabel={t('Codex pricing JSON')}
+          ariaLabel={t('Model pricing JSON')}
           placeholder='{"models":{"model-name":"tier(\"base\", p * 1 + c * 2)"}}'
           heightClassName='h-72 min-h-72 max-h-72'
         />
         {parseError && (
           <Alert variant='destructive'>
             <AlertDescription>
-              {t('Invalid Codex pricing JSON')}
+              {t('Invalid model pricing JSON')}
             </AlertDescription>
           </Alert>
         )}
@@ -354,9 +351,12 @@ export function CodexPricingImportDialog(props: CodexPricingImportDialogProps) {
         {skippedCount > 0 && !parseError && drafts.length > 0 && (
           <Alert>
             <AlertDescription>
-              {t('Some entries will be skipped because no valid pricing was found.', {
-                count: skippedCount,
-              })}
+              {t(
+                'Some entries will be skipped because no valid pricing was found.',
+                {
+                  count: skippedCount,
+                }
+              )}
             </AlertDescription>
           </Alert>
         )}

@@ -23,16 +23,16 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 
 import {
-  buildCodexImportPreview,
-  buildCodexPricingPrompt,
-  createCodexPricingDocument,
-  parseCodexPricingModels,
-  serializeCodexPricingDocument,
-} from '../model-pricing-codex'
+  buildImportPreview,
+  buildPricingPrompt,
+  createPricingDocument,
+  parsePricingModels,
+  serializePricingDocument,
+} from '../model-pricing-handoff'
 import {
-  CodexPricingExportDialog,
-  CodexPricingImportDialog,
-} from '../model-pricing-codex-dialog'
+  PricingExportDialog,
+  PricingImportDialog,
+} from '../model-pricing-handoff-dialog'
 import type { ModelPricingSnapshot } from '../model-pricing-snapshots'
 
 const snapshot = (
@@ -50,7 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('compact Codex pricing handoff', () => {
+describe('compact model pricing handoff', () => {
   test('exports unpriced, expression, legacy, and task models without internal fields', () => {
     const schemas = new Map<string, BillingUsageSchema>([
       [
@@ -61,7 +61,7 @@ describe('compact Codex pricing handoff', () => {
         },
       ],
     ])
-    const document = createCodexPricingDocument(
+    const document = createPricingDocument(
       [
         snapshot('unpriced-model'),
         snapshot('expression-model', {
@@ -87,27 +87,27 @@ describe('compact Codex pricing handoff', () => {
         $expr: null,
       },
     })
-    const json = serializeCodexPricingDocument(document)
+    const json = serializePricingDocument(document)
     expect(json).not.toContain('billing_setting')
     expect(json).not.toContain('hasConflict')
     expect(json).not.toContain('effective')
-    expect(buildCodexPricingPrompt(document)).toContain(
+    expect(buildPricingPrompt(document)).toContain(
       'Every leaf branch must be wrapped in tier'
     )
-    expect(buildCodexPricingPrompt(document)).toContain('unpriced-model')
+    expect(buildPricingPrompt(document)).toContain('unpriced-model')
   })
 
   test('accepts a full document, a bare model map, and a fenced JSON block', () => {
     expect(
-      parseCodexPricingModels(
+      parsePricingModels(
         '{"$rules":[],"models":{"model-a":"tier(\\"base\\", p * 1)"}}'
       )
     ).toEqual({ 'model-a': 'tier("base", p * 1)' })
-    expect(parseCodexPricingModels('{"model-a":null}')).toEqual({
+    expect(parsePricingModels('{"model-a":null}')).toEqual({
       'model-a': null,
     })
     expect(
-      parseCodexPricingModels('```json\n{"models":{"model-a":null}}\n```')
+      parsePricingModels('```json\n{"models":{"model-a":null}}\n```')
     ).toEqual({ 'model-a': null })
   })
 
@@ -127,7 +127,7 @@ describe('compact Codex pricing handoff', () => {
       ['task', { seconds: { type: 'number', unit: 'second' } }],
       ['task-unpriced', { seconds: { type: 'number', unit: 'second' } }],
     ])
-    const preview = buildCodexImportPreview(
+    const preview = buildImportPreview(
       JSON.stringify({
         models: {
           known: 'tier("base", p * 1 + c * 2)',
@@ -182,7 +182,7 @@ describe('compact Codex pricing handoff', () => {
         }),
       ],
     ])
-    const [preview] = buildCodexImportPreview(
+    const [preview] = buildImportPreview(
       '{"models":{"legacy":{"output":null}}}',
       current,
       new Map()
@@ -199,7 +199,7 @@ describe('compact Codex pricing handoff', () => {
   })
 
   test('uses an expression when compact prices cannot be represented by ratios', () => {
-    const [preview] = buildCodexImportPreview(
+    const [preview] = buildImportPreview(
       '{"models":{"image-model":{"input":2,"image_output":8}}}',
       new Map(),
       new Map()
@@ -212,12 +212,12 @@ describe('compact Codex pricing handoff', () => {
   })
 })
 
-describe('Codex pricing export dialog', () => {
+describe('Export model pricing dialog', () => {
   test('loads a JSON file and applies valid pricing to the draft only', async () => {
     const user = userEvent.setup()
     const onApply = vi.fn()
     render(
-      <CodexPricingImportDialog
+      <PricingImportDialog
         open
         onOpenChange={() => undefined}
         currentSnapshots={new Map([['model-a', snapshot('model-a')]])}
@@ -266,7 +266,7 @@ describe('Codex pricing export dialog', () => {
       Object.assign(class extends URL {}, {
         createObjectURL: vi.fn((blob: Blob) => {
           downloaded = blob
-          return 'blob:codex-pricing'
+          return 'blob:model-pricing-handoff'
         }),
         revokeObjectURL: vi.fn(),
       })
@@ -278,7 +278,7 @@ describe('Codex pricing export dialog', () => {
       })
 
     render(
-      <CodexPricingExportDialog
+      <PricingExportDialog
         open
         onOpenChange={() => undefined}
         snapshots={[snapshot('model-a')]}
@@ -286,7 +286,7 @@ describe('Codex pricing export dialog', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: 'Copy Codex prompt' }))
+    await user.click(screen.getByRole('button', { name: 'Copy agent prompt' }))
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining('Every leaf branch must be wrapped in tier')
     )
@@ -300,7 +300,7 @@ describe('Codex pricing export dialog', () => {
       String(date.getMonth() + 1).padStart(2, '0'),
       String(date.getDate()).padStart(2, '0'),
     ].join('-')
-    expect(downloadName).toBe(`model-pricing-codex-${day}.json`)
+    expect(downloadName).toBe(`model-pricing-handoff-${day}.json`)
     expect(await downloaded?.text()).toContain('"model-a": null')
   })
 })

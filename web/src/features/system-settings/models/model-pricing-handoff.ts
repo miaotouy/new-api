@@ -29,7 +29,7 @@ import type { ModelRatioData } from './model-pricing-core'
 import type { ModelPricingSnapshot } from './model-pricing-snapshots'
 import { formatPricingNumber } from './pricing-format'
 
-export const CODEX_PRICING_RULES = [
+export const PRICING_RULES = [
   'Research official provider pricing in USD.',
   'Prefer new-api billing expressions and keep model names unchanged.',
   'Token coefficients are USD per 1M tokens. Use tier(...), and use len for context tiers.',
@@ -56,30 +56,30 @@ export type CompactTaskPricing = {
   $usage: CompactUsageSchema
   $expr: string | null
 }
-export type CodexPricingValue =
+export type PricingValue =
   | null
   | string
   | CompactLegacyPricing
   | CompactTaskPricing
 
-export type CodexPricingDocument = {
+export type PricingDocument = {
   $rules: readonly string[]
-  models: Record<string, CodexPricingValue>
+  models: Record<string, PricingValue>
 }
 
-export type CodexImportStatus =
+export type ImportStatus =
   | 'unchanged'
   | 'new'
   | 'update'
   | 'unresolved'
   | 'error'
 
-export type CodexImportPreview = {
+export type ImportPreview = {
   name: string
-  status: CodexImportStatus
+  status: ImportStatus
   extra: boolean
-  current: CodexPricingValue
-  next: CodexPricingValue
+  current: PricingValue
+  next: PricingValue
   draft?: ModelRatioData
   error?: string
 }
@@ -132,10 +132,10 @@ function snapshotToLegacy(
   return legacy
 }
 
-export function snapshotToCodexPricing(
+export function snapshotToPricing(
   snapshot: ModelPricingSnapshot,
   usageSchema?: BillingUsageSchema
-): CodexPricingValue {
+): PricingValue {
   const fullExpression = snapshot.billingExpr
     ? combineBillingExpr(snapshot.billingExpr, snapshot.requestRuleExpr ?? '')
     : null
@@ -151,30 +151,26 @@ export function snapshotToCodexPricing(
   return snapshotToLegacy(snapshot)
 }
 
-export function createCodexPricingDocument(
+export function createPricingDocument(
   snapshots: ModelPricingSnapshot[],
   usageSchemas: ReadonlyMap<string, BillingUsageSchema>
-): CodexPricingDocument {
+): PricingDocument {
   const models = Object.fromEntries(
     [...snapshots]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((snapshot) => [
         snapshot.name,
-        snapshotToCodexPricing(snapshot, usageSchemas.get(snapshot.name)),
+        snapshotToPricing(snapshot, usageSchemas.get(snapshot.name)),
       ])
   )
-  return { $rules: CODEX_PRICING_RULES, models }
+  return { $rules: PRICING_RULES, models }
 }
 
-export function serializeCodexPricingDocument(
-  document: CodexPricingDocument
-): string {
+export function serializePricingDocument(document: PricingDocument): string {
   return `${JSON.stringify(document, null, 2)}\n`
 }
 
-export function buildCodexPricingPrompt(
-  document: CodexPricingDocument
-): string {
+export function buildPricingPrompt(document: PricingDocument): string {
   return `${LLM_PROMPT_TEMPLATE}
 
 ## Batch task
@@ -192,9 +188,7 @@ function extractJsonText(value: string): string {
   return match ? match[1] : trimmed
 }
 
-export function parseCodexPricingModels(
-  value: string
-): Record<string, unknown> {
+export function parsePricingModels(value: string): Record<string, unknown> {
   const parsed: unknown = JSON.parse(extractJsonText(value))
   if (!isRecord(parsed)) throw new Error('Pricing JSON must be an object')
   const source = 'models' in parsed ? parsed.models : parsed
@@ -285,7 +279,7 @@ function validateLegacyPricing(
   return result
 }
 
-function parsePricingValue(value: unknown): CodexPricingValue {
+function parsePricingValue(value: unknown): PricingValue {
   if (value === null) return null
   if (typeof value === 'string') return value
   if (!isRecord(value)) {
@@ -307,21 +301,20 @@ function parsePricingValue(value: unknown): CodexPricingValue {
   return validateLegacyPricing(value)
 }
 
-const isTaskPricing = (value: CodexPricingValue): value is CompactTaskPricing =>
+const isTaskPricing = (value: PricingValue): value is CompactTaskPricing =>
   isRecord(value) && '$usage' in value
 
-const isLegacyPricing = (
-  value: CodexPricingValue
-): value is CompactLegacyPricing => isRecord(value) && !('$usage' in value)
+const isLegacyPricing = (value: PricingValue): value is CompactLegacyPricing =>
+  isRecord(value) && !('$usage' in value)
 
-function hasConfiguredPricing(value: CodexPricingValue): boolean {
+function hasConfiguredPricing(value: PricingValue): boolean {
   if (value === null) return false
   if (typeof value === 'string') return value.trim() !== ''
   if (isTaskPricing(value)) return Boolean(value.$expr?.trim())
   return Object.values(value).some((price) => price !== null)
 }
 
-function canonical(value: CodexPricingValue): string {
+function canonical(value: PricingValue): string {
   if (!isRecord(value)) return JSON.stringify(value)
   return JSON.stringify(
     Object.fromEntries(
@@ -471,17 +464,17 @@ function legacyToDraft(
   }
 }
 
-export function buildCodexImportPreview(
+export function buildImportPreview(
   text: string,
   currentSnapshots: ReadonlyMap<string, ModelPricingSnapshot>,
   usageSchemas: ReadonlyMap<string, BillingUsageSchema>
-): CodexImportPreview[] {
-  const models = parseCodexPricingModels(text)
+): ImportPreview[] {
+  const models = parsePricingModels(text)
   return Object.entries(models).map(([name, rawValue]) => {
     const currentSnapshot = currentSnapshots.get(name)
     const knownUsage = usageSchemas.get(name)
     const current = currentSnapshot
-      ? snapshotToCodexPricing(currentSnapshot, knownUsage)
+      ? snapshotToPricing(currentSnapshot, knownUsage)
       : null
     const extra = !currentSnapshot
     try {
@@ -544,7 +537,7 @@ export function buildCodexImportPreview(
         status: 'error',
         extra,
         current,
-        next: rawValue as CodexPricingValue,
+        next: rawValue as PricingValue,
         error: error instanceof Error ? error.message : String(error),
       }
     }
