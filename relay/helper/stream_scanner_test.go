@@ -285,6 +285,40 @@ func TestStreamScannerHandler_ClientCancelAbortsUpstreamAndReturns(t *testing.T)
 
 // ---------- Ping tests ----------
 
+func TestStreamScannerHandler_DrainAfterClientCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
+
+	pr, pw := io.Pipe()
+	t.Cleanup(func() {
+		_ = pr.Close()
+		_ = pw.Close()
+	})
+	go func() {
+		_, _ = fmt.Fprint(pw, "data: first\n")
+		_, _ = fmt.Fprint(pw, "data: second\n")
+		_, _ = fmt.Fprint(pw, "data: [DONE]\n")
+		_ = pw.Close()
+	}()
+
+	info := &relaycommon.RelayInfo{
+		DisablePing: true,
+		ChannelMeta: &relaycommon.ChannelMeta{},
+	}
+	var count atomic.Int64
+	StreamScannerHandlerWithOptions(c, &http.Response{Body: pr}, info, func(data string, sr *StreamResult) {
+		count.Add(1)
+	}, StreamScannerOptions{DrainOnClientGone: true})
+
+	assert.Equal(t, int64(2), count.Load())
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonClientGone, info.StreamStatus.EndReason)
+}
+
 func TestStreamScannerHandler_PingSentDuringSlowUpstream(t *testing.T) {
 	setting := operation_setting.GetGeneralSetting()
 	oldEnabled := setting.PingIntervalEnabled

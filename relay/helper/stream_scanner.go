@@ -80,8 +80,24 @@ func ExtendWriteDeadline(c *gin.Context) {
 	_ = http.NewResponseController(c.Writer).SetWriteDeadline(time.Now().Add(streamWriteTimeout))
 }
 
-func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
+// StreamScannerOptions controls how an upstream stream is handled after the
+// downstream client disconnects.
+type StreamScannerOptions struct {
+	// DrainOnClientGone keeps reading the upstream stream after the downstream
+	// request is canceled. The data handler must avoid writing to the client in
+	// this mode and may use the remaining events to recover final usage data.
+	DrainOnClientGone bool
+}
 
+func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult)) {
+	streamScannerHandler(c, resp, info, dataHandler, StreamScannerOptions{})
+}
+
+func StreamScannerHandlerWithOptions(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult), options StreamScannerOptions) {
+	streamScannerHandler(c, resp, info, dataHandler, options)
+}
+
+func streamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo, dataHandler func(data string, sr *StreamResult), options StreamScannerOptions) {
 	if resp == nil || dataHandler == nil {
 		return
 	}
@@ -296,15 +312,33 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 	})
 
 	// 主循环等待完成或超时
+	clientGone := false
 	select {
 	case <-ticker.C:
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonTimeout, nil)
 	case <-stopChan:
 		// EndReason already set by the goroutine that triggered stopChan
 	case <-c.Request.Context().Done():
-		// 客户端断开：立即 cleanup 关闭上游 resp.Body，解除 scanner 阻塞并让上游停止生成，
-		// 避免为已放弃的请求继续消费上游 token。
 		info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+		clientGone = true
+	}
+
+	if clientGone && options.DrainOnClientGone {
+		// Keep the upstream body open long enough for the parser to observe a
+		// terminal event carrying usage. A disconnected downstream must never
+		// make the relay wait forever on a stalled upstream.
+		drainTimer := time.NewTimer(streamingTimeout)
+		select {
+		case <-stopChan:
+		case <-drainTimer.C:
+			logger.LogWarn(c, "upstream stream drain timed out after downstream client disconnected")
+		}
+		if !drainTimer.Stop() {
+			select {
+			case <-drainTimer.C:
+			default:
+			}
+		}
 	}
 
 	cleanup()

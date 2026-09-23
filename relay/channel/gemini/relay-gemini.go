@@ -173,7 +173,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	var accumulatedUsageMetadata *dto.GeminiUsageMetadata
 	responseText := strings.Builder{}
 
-	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+	helper.StreamScannerHandlerWithOptions(c, resp, info, func(data string, sr *helper.StreamResult) {
 		var geminiResponse dto.GeminiChatResponse
 		if err := common.UnmarshalJsonStr(data, &geminiResponse); err != nil {
 			streamErr = fmt.Errorf("unmarshal Gemini stream response: %w", err)
@@ -228,7 +228,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			streamErr = errors.New("Gemini stream callback stopped")
 			sr.Stop(streamErr)
 		}
-	})
+	}, helper.StreamScannerOptions{DrainOnClientGone: true})
 	info.StreamStatus.RequireTerminal()
 
 	if !hasBillableUsageMetadata {
@@ -273,6 +273,9 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 	nextToolCallIndexByChoice := make(map[int]int)
 
 	usage, err := geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
+		if isGeminiDownstreamStop(c, info) {
+			return true
+		}
 		response, isStop := streamResponseGeminiChat2OpenAI(geminiResponse)
 
 		response.Id = id
@@ -365,9 +368,11 @@ func GeminiChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *
 		response = helper.GenerateStopResponse(id, createAt, info.UpstreamModelName, finishReason)
 		response.Usage = usage
 	}
-	handleErr := handleFinalStream(c, info, response)
-	if handleErr != nil {
-		common.SysLog("send final response failed: " + handleErr.Error())
+	if !isGeminiDownstreamStop(c, info) {
+		handleErr := handleFinalStream(c, info, response)
+		if handleErr != nil {
+			common.SysLog("send final response failed: " + handleErr.Error())
+		}
 	}
 	return usage, nil
 }

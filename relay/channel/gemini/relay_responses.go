@@ -147,6 +147,9 @@ func GeminiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, r
 	}
 
 	usage, streamAPIError := geminiStreamHandler(c, info, resp, func(_ string, geminiResponse *dto.GeminiChatResponse) bool {
+		if isGeminiDownstreamStop(c, info) {
+			return true
+		}
 		hostedBridge.Observe(geminiResponse)
 		return sendChunk(geminiResponse)
 	})
