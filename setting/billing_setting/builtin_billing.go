@@ -13,4 +13,11 @@ var builtinBillingExpr = map[string]string{
 	// Do not infer service-tier discounts from incoming request parameters:
 	// channels filter service_tier by default, so it may not reach the upstream.
 	"gpt-6-astra": `len <= 272000 ? tier("standard", p * 10 + c * 50 + cr * 1 + cc * 12.5) : tier("long_context", p * 20 + c * 75 + cr * 2 + cc * 25)`,
+	// https://docs.typesafe.ai/models.md (Jev 1.13): $0.042 per million
+	// input tokens, output free. The typesafe task plugin measures the billed
+	// quantity as the input_tokens usage fact, so these are task usage prices
+	// in USD rather than a $/1M token rate.
+	"jev-1.13.0":  `tier("base", u("input_tokens") * 0.042 / 1000000)`,
+	"jev-latest":  `tier("base", u("input_tokens") * 0.042 / 1000000)`,
+	"jev-preview": `tier("base", u("input_tokens") * 0.042 / 1000000)`,
 }
