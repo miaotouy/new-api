@@ -338,7 +338,7 @@ export function PricingImportDialog(props: PricingImportDialogProps) {
                     <TableCell className='max-w-xl align-top whitespace-normal'>
                       <pre className='text-xs break-words whitespace-pre-wrap'>
                         {item.error
-                          ? t('Invalid pricing value')
+                          ? item.error
                           : formatPricingValue(item.next)}
                       </pre>
                     </TableCell>
