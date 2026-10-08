@@ -26,7 +26,7 @@ export const meta = {
   routes: [
     {
       method: "POST",
-      path: "/typesafe/v1/systemone",
+      path: "/v1/systemone",
       type: "submit",
       decode: "decodeSystemOne",
       render: "renderSystemOne",
@@ -104,9 +104,10 @@ export function buildSubmitRequest(ctx) {
   let baseUrl = ctx.baseUrl.replace(/\/+$/, "");
   // Accept channel base URLs with an optional /v1 suffix.
   if (baseUrl.endsWith("/v1")) baseUrl = baseUrl.slice(0, -3);
-  const prefix = ctx.upstream && ctx.upstream.kind === "new_api" ? "/typesafe" : "";
+  // The native route and the vendor endpoint share the same path, so direct
+  // vendor channels and upstream New API gateways both use it unchanged.
   return {
-    url: baseUrl + prefix + "/v1/systemone",
+    url: baseUrl + "/v1/systemone",
     method: "POST",
     headers: {
       Authorization: "Bearer " + ctx.apiKey,

@@ -49,7 +49,7 @@ func typeSafeSystemOneRequest() map[string]any {
 func TestBuiltInTypeSafeSystemOneContract(t *testing.T) {
 	plugin, registry := loadBuiltinPlugin(t, "typesafe")
 
-	binding, found := registry.Generation().LookupDeclaredRoute("POST", "/typesafe/v1/systemone")
+	binding, found := registry.Generation().LookupDeclaredRoute("POST", "/v1/systemone")
 	require.True(t, found)
 	assert.Same(t, plugin, binding.Plugin)
 	assert.Equal(t, jsplugin.RouteTypeSubmit, binding.Route.Type)
@@ -96,11 +96,11 @@ func TestBuiltInTypeSafeBuildsSystemOneRequests(t *testing.T) {
 			},
 		},
 		{
-			name:       "new_api gateway keeps the plugin route prefix",
+			name:       "new_api gateway uses the same route path",
 			upstream:   map[string]any{"kind": "new_api"},
 			baseURL:    "https://gateway.example/v1",
 			upstreamID: "jev-latest",
-			wantURL:    "https://gateway.example/typesafe/v1/systemone",
+			wantURL:    "https://gateway.example/v1/systemone",
 			wantRequest: map[string]any{
 				"model": "jev-latest", "state": request["state"], "questions": request["questions"],
 			},

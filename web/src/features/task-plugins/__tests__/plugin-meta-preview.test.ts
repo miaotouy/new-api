@@ -114,7 +114,7 @@ test('previews TypeSafe model constants used by a read-only validation hook', ()
     const MODELS = ['jev-1.13.0', 'jev-latest', 'jev-preview'];
     export const meta = {
       models: MODELS,
-      routes: [{method: 'POST', path: '/typesafe/v1/systemone', type: 'submit'}],
+      routes: [{method: 'POST', path: '/v1/systemone', type: 'submit'}],
     };
     function validate(model) { return MODELS.includes(model); }
   `)

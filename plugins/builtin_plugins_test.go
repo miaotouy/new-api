@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var expectedKeys = []string{"alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "typesafe", "vertex-ai", "vidu"}
+var expectedKeys = []string{"agnes", "alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "typesafe", "vertex-ai", "vidu"}
 
 func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing.T) {
 	generation := jsplugin.DefaultRegistry.Generation()
@@ -25,6 +25,8 @@ func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing
 		action    string
 		renderer  string
 	}{
+		{"POST", "/agnes/v1/videos", "agnes", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"GET", "/agnes/agnesapi/:video_id", "agnes", jsplugin.RouteTypeQuery, "", "taskStatus"},
 		{"POST", "/kling/v1/videos/text2video", "kling", jsplugin.RouteTypeSubmit, "text_to_video", "taskCreated"},
 		{"POST", "/kling/v1/videos/image2video", "kling", jsplugin.RouteTypeSubmit, "image_to_video", "taskCreated"},
 		{"GET", "/kling/v1/videos/text2video/:task_id", "kling", jsplugin.RouteTypeQuery, "", "taskStatus"},
@@ -36,7 +38,7 @@ func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing
 		{"POST", "/doubao/api/v3/contents/generations/tasks", "doubao", jsplugin.RouteTypeSubmit, "", "taskCreated"},
 		{"GET", "/doubao/api/v3/contents/generations/tasks/:task_id", "doubao", jsplugin.RouteTypeQuery, "", "taskStatus"},
 		{"POST", "/doubao/api/v3/images/generations", "doubao", jsplugin.RouteTypeSubmit, "", "imageCreated"},
-		{"POST", "/typesafe/v1/systemone", "typesafe", jsplugin.RouteTypeSubmit, "", "renderSystemOne"},
+		{"POST", "/v1/systemone", "typesafe", jsplugin.RouteTypeSubmit, "", "renderSystemOne"},
 	}
 	for _, expected := range routes {
 		t.Run(expected.method+" "+expected.path, func(t *testing.T) {
