@@ -174,18 +174,37 @@ export function parseLogOther(other: string): LogOtherData | null {
  */
 export function getCacheHitRate(
   cachedTokens: number,
-  inputTokens: number
+  inputTokens: number,
+  other: LogOtherData | null = null
 ): number | null {
   if (
     !Number.isFinite(cachedTokens) ||
     !Number.isFinite(inputTokens) ||
     cachedTokens <= 0 ||
-    inputTokens <= 0
+    inputTokens < 0
   ) {
     return null
   }
 
-  return Math.min(100, Math.max(0, (cachedTokens / inputTokens) * 100))
+  const isClaudeUsage = other?.usage_semantic
+    ? other.usage_semantic === 'anthropic'
+    : other?.claude === true
+  let totalInputTokens = inputTokens
+  if (isClaudeUsage) {
+    // Claude input tokens exclude both cache reads and cache writes.
+    const cacheWrite5m = other?.cache_creation_tokens_5m ?? 0
+    const cacheWrite1h = other?.cache_creation_tokens_1h ?? 0
+    const cacheWriteTokens =
+      cacheWrite5m > 0 || cacheWrite1h > 0
+        ? cacheWrite5m + cacheWrite1h
+        : (other?.cache_creation_tokens ?? 0)
+    if (!Number.isFinite(cacheWriteTokens) || cacheWriteTokens < 0) return null
+    totalInputTokens += cachedTokens + cacheWriteTokens
+  }
+
+  if (!Number.isFinite(totalInputTokens) || totalInputTokens <= 0) return null
+
+  return Math.min(100, Math.max(0, (cachedTokens / totalInputTokens) * 100))
 }
 
 export function getReasoningEffortVariant(

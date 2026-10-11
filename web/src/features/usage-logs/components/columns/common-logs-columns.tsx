@@ -750,7 +750,11 @@ export function useCommonLogsColumns(
           const cacheWriteTokens = hasSplitCache
             ? cacheWrite5m + cacheWrite1h
             : other?.cache_creation_tokens || 0
-          const cacheHitRate = getCacheHitRate(cacheReadTokens, promptTokens)
+          const cacheHitRate = getCacheHitRate(
+            cacheReadTokens,
+            promptTokens,
+            other
+          )
 
           return (
             <div className='flex flex-col gap-0.5'>
