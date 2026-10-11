@@ -9,7 +9,7 @@ if /i "%~1"=="--skip-web" set "SKIP_WEB=1"
 where git >nul 2>nul || (echo [ERROR] git not found in PATH & exit /b 1)
 where go >nul 2>nul || (echo [ERROR] go not found in PATH & exit /b 1)
 
-for /f "delims=" %%i in ('git describe --tags 2^>nul') do set "VERSION=%%i"
+for /f "delims=" %%i in ('git describe --tags --match "v[0-9]*" 2^>nul') do set "VERSION=%%i"
 if not defined VERSION (
 	echo [ERROR] failed to resolve version via git describe
 	exit /b 1
