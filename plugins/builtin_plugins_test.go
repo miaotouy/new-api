@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var expectedKeys = []string{"agnes", "alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "typesafe", "vertex-ai", "vidu"}
+var expectedKeys = []string{"agnes", "alibaba", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "typesafe", "vertex-ai", "vidu", "xai"}
 
 func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing.T) {
 	generation := jsplugin.DefaultRegistry.Generation()
@@ -39,6 +39,10 @@ func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing
 		{"GET", "/doubao/api/v3/contents/generations/tasks/:task_id", "doubao", jsplugin.RouteTypeQuery, "", "taskStatus"},
 		{"POST", "/doubao/api/v3/images/generations", "doubao", jsplugin.RouteTypeSubmit, "", "imageCreated"},
 		{"POST", "/v1/systemone", "typesafe", jsplugin.RouteTypeSubmit, "", "renderSystemOne"},
+		{"POST", "/xai/v1/videos/generations", "xai", jsplugin.RouteTypeSubmit, "", "videoCreated"},
+		{"POST", "/xai/v1/videos/edits", "xai", jsplugin.RouteTypeSubmit, "", "videoCreated"},
+		{"POST", "/xai/v1/videos/extensions", "xai", jsplugin.RouteTypeSubmit, "", "videoCreated"},
+		{"GET", "/xai/v1/videos/:request_id", "xai", jsplugin.RouteTypeQuery, "", "videoStatus"},
 	}
 	for _, expected := range routes {
 		t.Run(expected.method+" "+expected.path, func(t *testing.T) {
@@ -69,6 +73,7 @@ func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing
 		{51, "jimeng"},
 		{54, "doubao"},
 		{55, "sora"},
+		{48, "xai"},
 	}
 	for _, channelType := range channelTypes {
 		plugin, found := generation.GetByChannelType(channelType.value)
@@ -259,6 +264,16 @@ func TestBuiltInPluginsAddressNewAPIUpstreamOnNativeRoutes(t *testing.T) {
 			vendorQuery:      "/v1/videos/tid",
 			gatewayQuery:     "/v1/videos/tid",
 			content:          "/v1/videos/tid/content",
+		},
+		{
+			key:              "xai",
+			driver:           map[string]any{"action": "text_to_video", "model": "grok-imagine-video", "upstreamModel": "grok-imagine-video", "requestBody": map[string]any{"model": "grok-imagine-video", "prompt": "a cat"}},
+			vendorKey:        "vendor-key",
+			vendorAuthPrefix: "Bearer vendor-key",
+			vendorSubmit:     "/v1/videos/generations",
+			gatewaySubmit:    "/xai/v1/videos/generations",
+			vendorQuery:      "/v1/videos/tid",
+			gatewayQuery:     "/xai/v1/videos/tid",
 		},
 	}
 	variants := []struct {

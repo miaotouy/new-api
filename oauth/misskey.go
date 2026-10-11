@@ -3,6 +3,7 @@ package oauth
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
@@ -49,11 +49,11 @@ func (p *MisskeyProvider) getInstance() string {
 
 func (p *MisskeyProvider) ExchangeToken(ctx context.Context, code string, c *gin.Context) (*OAuthToken, error) {
 	if code == "" {
-		return nil, NewOAuthError(i18n.MsgOAuthInvalidCode, nil)
+		return nil, NewOAuthError(common.NewMessage(msgInvalidCode))
 	}
 
 	instance := p.getInstance()
-	logger.LogDebug(ctx, "[OAuth-Misskey] ExchangeToken: code=%s..., instance=%s", code[:min(len(code), 10)], instance)
+	logger.LogDebug(ctx, "[OAuth-Misskey] ExchangeToken: instance=%s", instance)
 
 	// MiAuth: code is the session ID, check it against /api/miauth/{session}/check
 	checkURL := fmt.Sprintf("%s/api/miauth/%s/check", instance, code)
@@ -70,8 +70,13 @@ func (p *MisskeyProvider) ExchangeToken(ctx context.Context, code string, c *gin
 	client := http.Client{Timeout: 20 * time.Second}
 	res, err := client.Do(req)
 	if err != nil {
+		// URL errors include the MiAuth session ID in the request path.
+		var requestErr *url.Error
+		if errors.As(err, &requestErr) {
+			err = requestErr.Err
+		}
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] ExchangeToken error: %s", err.Error()))
-		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": "Misskey"}, err.Error())
+		return nil, NewOAuthErrorWithRaw(common.NewMessage(msgConnectFailed, map[string]any{"provider": "Misskey"}), err.Error())
 	}
 	defer res.Body.Close()
 
@@ -90,7 +95,7 @@ func (p *MisskeyProvider) ExchangeToken(ctx context.Context, code string, c *gin
 
 	if !checkRes.Ok || checkRes.Token == "" {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] ExchangeToken failed: ok=%v, has_token=%v", checkRes.Ok, checkRes.Token != ""))
-		return nil, NewOAuthError(i18n.MsgOAuthTokenFailed, map[string]any{"Provider": "Misskey"})
+		return nil, NewOAuthError(common.NewMessage(msgTokenFailed, map[string]any{"provider": "Misskey"}))
 	}
 
 	logger.LogDebug(ctx, "[OAuth-Misskey] ExchangeToken success")
@@ -124,7 +129,7 @@ func (p *MisskeyProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 	res, err := client.Do(req)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] GetUserInfo error: %s", err.Error()))
-		return nil, NewOAuthErrorWithRaw(i18n.MsgOAuthConnectFailed, map[string]any{"Provider": "Misskey"}, err.Error())
+		return nil, NewOAuthErrorWithRaw(common.NewMessage(msgConnectFailed, map[string]any{"provider": "Misskey"}), err.Error())
 	}
 	defer res.Body.Close()
 
@@ -132,7 +137,7 @@ func (p *MisskeyProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 
 	if res.StatusCode != http.StatusOK {
 		logger.LogError(ctx, fmt.Sprintf("[OAuth-Misskey] GetUserInfo failed: status=%d", res.StatusCode))
-		return nil, NewOAuthError(i18n.MsgOAuthGetUserErr, map[string]any{"Provider": "Misskey"})
+		return nil, NewOAuthError(common.NewMessage(msgGetUserFailed))
 	}
 
 	respBody, err := io.ReadAll(res.Body)
@@ -148,7 +153,7 @@ func (p *MisskeyProvider) GetUserInfo(ctx context.Context, token *OAuthToken) (*
 
 	if userInfo.Id == "" {
 		logger.LogError(ctx, "[OAuth-Misskey] GetUserInfo failed: empty user id")
-		return nil, NewOAuthError(i18n.MsgOAuthUserInfoEmpty, map[string]any{"Provider": "Misskey"})
+		return nil, NewOAuthError(common.NewMessage(msgUserInfoEmpty, map[string]any{"provider": "Misskey"}))
 	}
 
 	// Use username as display name if name is empty
