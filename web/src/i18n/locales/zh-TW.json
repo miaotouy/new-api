@@ -949,6 +949,7 @@
     "Cache Read": "緩存讀取",
     "Cache read price": "緩存讀取價格",
     "Cache repeated prompt prefixes for cheaper, faster reuse": "緩存重複的提示詞前綴，複用更快、更省錢",
+    "Cache statistics need rebuilding": "請重建快取統計",
     "Cache write": "緩存寫入",
     "Cache Write": "緩存寫入",
     "Cache Write (1h)": "緩存寫入 (1h)",

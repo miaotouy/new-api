@@ -18,32 +18,33 @@ const (
 )
 
 // ClassifyRelayOutcome decides whether one finished relay counts as a health
-// sample. Business rejections and client cancellations are not samples; the
-// classification is independent of retries, channel disabling and billing.
+// sample. Business rejections and cancellations before an upstream result are
+// ignored. A client closing after the terminal event cannot erase that result.
+// Classification is independent of retries, channel disabling and billing.
 func ClassifyRelayOutcome(ctx context.Context, info *relaycommon.RelayInfo, apiErr *types.NewAPIError) Outcome {
 	if info == nil || info.PerformanceBusinessRejection {
 		return OutcomeIgnored
 	}
-	if ctx != nil && ctx.Err() == context.Canceled {
-		return OutcomeIgnored
-	}
-	if apiErr != nil && errors.Is(apiErr, context.Canceled) {
-		return OutcomeIgnored
-	}
 	stream := info.StreamStatus.OutcomeSnapshot()
+	hasResult := stream.Response != relaycommon.ResponseOutcomeUnknown ||
+		stream.EndReason == relaycommon.StreamEndReasonDone ||
+		(!info.IsStream && info.StreamStatus == nil && apiErr == nil)
+	if !hasResult && ((ctx != nil && ctx.Err() == context.Canceled) || errors.Is(apiErr, context.Canceled)) {
+		return OutcomeIgnored
+	}
 	if stream.Response == relaycommon.ResponseOutcomeFailed {
 		return classifyFailure(false, stream.ErrorCode, stream.ErrorType, stream.ErrorStatus)
 	}
-	if apiErr != nil {
+	if apiErr != nil && !(hasResult && errors.Is(apiErr, context.Canceled)) {
 		root := rootAPIError(apiErr)
 		local := root.GetErrorType() == types.ErrorTypeNewAPIError
 		return classifyFailure(local, string(root.GetErrorCode()), root.ToOpenAIError().Type, root.StatusCode)
 	}
 	deadlineExceeded := info.StreamStatus != nil && errors.Is(info.StreamStatus.EndError, context.DeadlineExceeded)
-	if stream.Response == relaycommon.ResponseOutcomeCancelled || stream.EndReason == relaycommon.StreamEndReasonPingFail {
+	if stream.Response == relaycommon.ResponseOutcomeCancelled || (stream.EndReason == relaycommon.StreamEndReasonPingFail && !hasResult) {
 		return OutcomeIgnored
 	}
-	if stream.EndReason == relaycommon.StreamEndReasonClientGone && !deadlineExceeded {
+	if stream.EndReason == relaycommon.StreamEndReasonClientGone && !deadlineExceeded && !hasResult {
 		return OutcomeIgnored
 	}
 	if stream.Response == relaycommon.ResponseOutcomeIncomplete {
@@ -58,6 +59,9 @@ func ClassifyRelayOutcome(ctx context.Context, info *relaycommon.RelayInfo, apiE
 	}
 	if stream.HasErrors || deadlineExceeded {
 		return OutcomeFailure
+	}
+	if stream.Response == relaycommon.ResponseOutcomeCompleted {
+		return OutcomeSuccess
 	}
 	switch stream.EndReason {
 	case relaycommon.StreamEndReasonTimeout, relaycommon.StreamEndReasonScannerErr, relaycommon.StreamEndReasonPanic:

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PerformanceOverview } from '@/features/dashboard/components/models/performance-overview'
@@ -123,7 +123,7 @@ function renderModelDetails() {
 describe('server performance summaries', () => {
   it.each([PerformanceHealthPanel, PerformanceOverview])(
     'uses the weighted server result across models',
-    (Component) => {
+    async (Component) => {
       client.setQueryData(['perf-metrics-summary', 24], {
         success: true,
         data: {
@@ -142,6 +142,11 @@ describe('server performance summaries', () => {
       expect(screen.getByText('99.01%')).toBeVisible()
       expect(screen.queryByText('50.00%')).not.toBeInTheDocument()
       expect(screen.getByText('1.01s')).toBeVisible()
+      const badge = screen.getByRole('img', { name: 'a: Success rate 100.00%' })
+      fireEvent.focus(badge)
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(
+        'Success rate'
+      )
     }
   )
 

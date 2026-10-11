@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,9 @@ import (
 )
 
 var hotBuckets sync.Map
+
+// Queries see each sample either in memory or in the database during a flush.
+var persistenceLock sync.RWMutex
 
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
@@ -112,7 +116,7 @@ func Record(sample Sample) {
 	}
 
 	key := bucketKey{
-		model:    sample.Model,
+		model:    strings.ToLower(sample.Model),
 		group:    sample.Group,
 		bucketTs: bucketStart(time.Now().Unix()),
 	}
@@ -135,6 +139,10 @@ func queryWindow(now time.Time, hours int) (int64, int64) {
 }
 
 func Query(params QueryParams) (QueryResult, error) {
+	persistenceLock.RLock()
+	defer persistenceLock.RUnlock()
+	requestedModel := params.Model
+	params.Model = strings.ToLower(params.Model)
 	startTs, endTs := queryWindow(time.Now(), params.Hours)
 	allowedGroups := allowedGroupSet(params.AllowedGroups)
 
@@ -150,7 +158,7 @@ func Query(params QueryParams) (QueryResult, error) {
 			}
 		}
 		mergeCounters(merged, bucketKey{
-			model:    row.ModelName,
+			model:    strings.ToLower(row.ModelName),
 			group:    row.Group,
 			bucketTs: row.BucketTs,
 		}, counters{
@@ -181,12 +189,14 @@ func Query(params QueryParams) (QueryResult, error) {
 		return true
 	})
 
-	result := buildQueryResult(params.Model, merged)
+	result := buildQueryResult(requestedModel, merged)
 	result.WindowStart, result.WindowEnd = startTs, endTs
 	return result, nil
 }
 
 func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
+	persistenceLock.RLock()
+	defer persistenceLock.RUnlock()
 	startTs, endTs := queryWindow(time.Now(), hours)
 	allowedGroups := allowedGroupSet(groups)
 
@@ -205,8 +215,8 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			outputTokens:   row.OutputTokens,
 			generationMs:   row.GenerationMs,
 		}
-		mergeModelTotals(totals, row.ModelName, value)
-		mergeModelBucket(modelBuckets, row.ModelName, row.BucketTs, value)
+		mergeModelTotals(totals, strings.ToLower(row.ModelName), value)
+		mergeModelBucket(modelBuckets, strings.ToLower(row.ModelName), row.BucketTs, value)
 	}
 
 	hotBuckets.Range(func(key, value any) bool {

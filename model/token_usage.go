@@ -3,9 +3,11 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/tidwall/gjson"
 	"gorm.io/gorm"
 )
 
@@ -69,6 +71,28 @@ func tokenUsageHour(timestamp int64) int64 {
 
 func tokenUsageCacheKey(data *TokenUsageData) string {
 	return fmt.Sprintf("%d\x00%s\x00%s\x00%d", data.UserID, data.Username, data.ModelName, data.CreatedAt)
+}
+
+// TokenUsageInputTokens includes cache reads and writes exactly once. Consume
+// logs retain provider-native prompt tokens; both live export and historical
+// rebuilding must convert Anthropic's exclusive input to inclusive input.
+func TokenUsageInputTokens(promptTokens, cachedTokens int, other string) int {
+	input := max(0, promptTokens)
+	if !gjson.Valid(other) {
+		return input
+	}
+	values := gjson.GetMany(other, "usage_semantic", "claude", "cache_creation_tokens", "cache_creation_tokens_5m", "cache_creation_tokens_1h")
+	semantic := values[0].String()
+	if semantic != "anthropic" && !(semantic == "" && values[1].Bool()) {
+		return input
+	}
+	input += min(max(0, cachedTokens), math.MaxInt-input)
+	creation := max(int64(0), values[2].Int())
+	if creation == 0 {
+		creation = min(max(int64(0), values[3].Int()), int64(math.MaxInt))
+		creation += min(max(int64(0), values[4].Int()), int64(math.MaxInt)-creation)
+	}
+	return input + int(min(creation, int64(math.MaxInt-input)))
 }
 
 func LogTokenUsageData(params TokenUsageDataLogParams) {

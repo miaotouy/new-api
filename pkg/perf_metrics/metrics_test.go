@@ -26,6 +26,7 @@ func TestClassifyRelayOutcome(t *testing.T) {
 		want Outcome
 	}{
 		{"success", context.Background(), nil, OutcomeSuccess},
+		{"non-stream success before client closes", canceled, nil, OutcomeSuccess},
 		{"upstream bad request", context.Background(), types.InitOpenAIError("unknown", 400), OutcomeIgnored},
 		{"upstream credentials returned as 400", context.Background(), types.InitOpenAIError("invalid_api_key", 400), OutcomeFailure},
 		{"wrapped credentials keep their cause", context.Background(), types.NewErrorWithStatusCode(types.InitOpenAIError("invalid_api_key", 400), types.ErrorCodeInvalidRequest, 400), OutcomeFailure},
@@ -81,6 +82,25 @@ func TestStreamOutcomeClassification(t *testing.T) {
 }
 
 func TestClientCancellationDuringUpstreamRead(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mark func(*relaycommon.StreamStatus)
+		want Outcome
+	}{
+		{"completed before client closes", (*relaycommon.StreamStatus).MarkCompleted, OutcomeSuccess},
+		{"output limit before client closes", func(s *relaycommon.StreamStatus) { s.MarkIncomplete("max_output_tokens") }, OutcomeSuccess},
+		{"upstream failure before client closes", func(s *relaycommon.StreamStatus) { s.MarkFailed("server_error", "", 500) }, OutcomeFailure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			stream := relaycommon.NewStreamStatus()
+			stream.RequireTerminal()
+			tc.mark(stream)
+			cancel()
+			stream.SetEndReason(relaycommon.StreamEndReasonClientGone, context.Canceled)
+			assert.Equal(t, tc.want, ClassifyRelayOutcome(ctx, &relaycommon.RelayInfo{IsStream: true, StreamStatus: stream}, nil))
+		})
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	stream := relaycommon.NewStreamStatus()
@@ -225,8 +245,8 @@ func TestPerformanceAggregationAndFlush(t *testing.T) {
 			assert.NotContains(t, string(encoded), "request_count")
 			assert.NotContains(t, string(encoded), "success_count")
 
-			flushCompletedBuckets()
-			flushCompletedBuckets()
+			flushBuckets()
+			flushBuckets()
 			after, err := Query(QueryParams{Model: "test-model", Hours: 24, AllowedGroups: groups})
 			require.NoError(t, err)
 			assert.Equal(t, before.Summary, after.Summary)
@@ -244,10 +264,32 @@ func TestPerformanceAggregationAndFlush(t *testing.T) {
 			assert.Nil(t, empty.Summary)
 			assert.Empty(t, empty.Series)
 
+			// Active-hour successes must survive a flush and a process cache reset.
+			require.NoError(t, model.UpsertPerfMetric(&model.PerfMetric{ModelName: "ReSpOnSeS-MoDeL", Group: "a", BucketTs: hour, RequestCount: 2, SuccessCount: 2}))
+			completed := relaycommon.NewStreamStatus()
+			completed.RequireTerminal()
+			completed.MarkCompleted()
+			completed.SetEndReason(relaycommon.StreamEndReasonClientGone, context.Canceled)
+			canceled, cancel := context.WithCancel(context.Background())
+			cancel()
+			RecordRelayResult(canceled, &relaycommon.RelayInfo{OriginModelName: "Responses-Model", UsingGroup: "a", StartTime: now, RelayFormat: types.RelayFormatOpenAIResponses, IsStream: true, StreamStatus: completed}, nil)
+			RecordRelayResult(context.Background(), &relaycommon.RelayInfo{OriginModelName: "responses-model", UsingGroup: "a", StartTime: now, RelayFormat: types.RelayFormatOpenAIResponses}, types.NewErrorWithStatusCode(errors.New("upstream failed"), types.ErrorCodeDoRequestFailed, 500))
+			flushBuckets()
+			flushBuckets()
+			hotBuckets.Clear()
+			responses, err := Query(QueryParams{Model: "RESPONSES-MODEL", Hours: 24, AllowedGroups: groups})
+			require.NoError(t, err)
+			require.NotNil(t, responses.Summary)
+			assert.Equal(t, 75.0, responses.Summary.SuccessRate)
+			assert.Equal(t, "RESPONSES-MODEL", responses.ModelName)
+			allModels, err := QuerySummaryAll(24, groups)
+			require.NoError(t, err)
+			require.Len(t, allModels.Models, 2)
+
 			require.NoError(t, model.UpsertPerfMetric(&model.PerfMetric{ModelName: "second-model", Group: "a", BucketTs: hour, RequestCount: 1}))
 			combined, err := QuerySummaryAll(24, groups)
 			require.NoError(t, err)
-			assert.Equal(t, 98.04, combined.Summary.SuccessRate)
+			assert.Equal(t, 97.17, combined.Summary.SuccessRate)
 			assert.Equal(t, 99.01, combined.Models[0].SuccessRate)
 		})
 	}

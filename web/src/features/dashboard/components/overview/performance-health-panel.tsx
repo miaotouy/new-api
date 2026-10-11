@@ -23,6 +23,11 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
 import {
   formatLatency,
@@ -121,23 +126,37 @@ export function PerformanceHealthPanel() {
                     <span className='min-w-0 flex-1 truncate font-mono text-[11px]'>
                       {model.model_name}
                     </span>
-                    <span className='inline-flex shrink-0 items-center gap-1'>
-                      <span
-                        className={cn(
-                          'size-1.5 rounded-full',
-                          getSuccessRateDotClass(model.success_rate)
-                        )}
-                        aria-hidden='true'
-                      />
-                      <span
-                        className={cn(
-                          'font-mono text-[11px] font-semibold tabular-nums',
-                          getSuccessRateTextClass(model.success_rate)
-                        )}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            role='img'
+                            tabIndex={0}
+                            aria-label={`${model.model_name}: ${t('Success rate')} ${formatUptimePct(model.success_rate)}`}
+                            className='inline-flex shrink-0 items-center gap-1'
+                          />
+                        }
                       >
-                        {formatUptimePct(model.success_rate)}
-                      </span>
-                    </span>
+                        <span
+                          className={cn(
+                            'size-1.5 rounded-full',
+                            getSuccessRateDotClass(model.success_rate)
+                          )}
+                          aria-hidden='true'
+                        />
+                        <span
+                          className={cn(
+                            'font-mono text-[11px] font-semibold tabular-nums',
+                            getSuccessRateTextClass(model.success_rate)
+                          )}
+                        >
+                          {formatUptimePct(model.success_rate)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent role='tooltip'>
+                        {t('Success rate')}
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 ))}
               </div>

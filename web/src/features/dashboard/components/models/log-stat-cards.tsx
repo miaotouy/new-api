@@ -28,6 +28,10 @@ import {
   calculateDashboardStats,
   getDefaultDays,
 } from '@/features/dashboard/lib'
+import {
+  calculateCacheHitRate,
+  calculateTokenUsageStats,
+} from '@/features/dashboard/lib/stats'
 import type {
   QuotaDataItem,
   TokenUsageDataItem,
@@ -106,15 +110,7 @@ export function LogStatCards(props: LogStatCardsProps) {
         const quotaData = quotaRes?.data || []
         const tokenData = tokenRes?.data || []
         const quotaStats = calculateDashboardStats(quotaData)
-        const inputTokens = tokenData.reduce(
-          (total, item) => total + (Number(item.input_tokens) || 0),
-          0
-        )
-        const cachedTokens = tokenData.reduce(
-          (total, item) => total + (Number(item.cached_tokens) || 0),
-          0
-        )
-        setStats({ ...quotaStats, inputTokens, cachedTokens })
+        setStats({ ...quotaStats, ...calculateTokenUsageStats(tokenData) })
         onDataUpdate?.(quotaData, false)
         onTokenDataUpdate?.(tokenData, false)
       })
@@ -144,16 +140,10 @@ export function LogStatCards(props: LogStatCardsProps) {
     cachedTokens: stats?.cachedTokens ?? 0,
   }
 
-  const cacheHitRate =
-    adaptedStats.inputTokens > 0
-      ? Math.min(
-          100,
-          Math.max(
-            0,
-            (adaptedStats.cachedTokens / adaptedStats.inputTokens) * 100
-          )
-        )
-      : null
+  const cacheHitRate = calculateCacheHitRate(
+    adaptedStats.inputTokens,
+    adaptedStats.cachedTokens
+  )
 
   const items = statCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
@@ -229,6 +219,11 @@ export function LogStatCards(props: LogStatCardsProps) {
                     <span>
                       {t('Cache Hit Rate')}: {it.cacheDetails.cacheHitRate}
                     </span>
+                    {adaptedStats.cachedTokens > adaptedStats.inputTokens && (
+                      <span className='text-amber-600 dark:text-amber-400'>
+                        {t('Cache statistics need rebuilding')}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>

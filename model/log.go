@@ -385,13 +385,14 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
+		inputTokens := TokenUsageInputTokens(params.PromptTokens, params.CachedTokens, otherStr)
 		LogQuotaData(QuotaDataLogParams{
 			UserID:    userId,
 			Username:  username,
 			ModelName: params.ModelName,
 			Quota:     params.Quota,
 			CreatedAt: createdAt,
-			TokenUsed: params.PromptTokens + params.CompletionTokens,
+			TokenUsed: inputTokens + params.CompletionTokens,
 			UseGroup:  params.Group,
 			TokenID:   params.TokenId,
 			ChannelID: params.ChannelId,
@@ -402,7 +403,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			Username:     username,
 			ModelName:    params.ModelName,
 			CreatedAt:    createdAt,
-			InputTokens:  params.PromptTokens,
+			InputTokens:  inputTokens,
 			OutputTokens: params.CompletionTokens,
 			CachedTokens: params.CachedTokens,
 		})

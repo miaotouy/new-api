@@ -87,7 +87,7 @@ func RunTokenUsageBackfill(ctx context.Context, task *model.SystemTask, reporter
 				result.LogsWithCacheTokens++
 				result.CachedTokens += int64(cachedTokens)
 			}
-			inputTokens := maxNonNegative(log.PromptTokens)
+			inputTokens := model.TokenUsageInputTokens(log.PromptTokens, cachedTokens, log.Other)
 			outputTokens := maxNonNegative(log.CompletionTokens)
 			if inputTokens == 0 && outputTokens == 0 && cachedTokens == 0 {
 				continue

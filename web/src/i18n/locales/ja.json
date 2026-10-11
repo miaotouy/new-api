@@ -949,6 +949,7 @@
     "Cache Read": "キャッシュ読み取り",
     "Cache read price": "キャッシュ読み取り価格",
     "Cache repeated prompt prefixes for cheaper, faster reuse": "繰り返しのプロンプト先頭部分をキャッシュし、低コスト・高速に再利用",
+    "Cache statistics need rebuilding": "キャッシュ統計を再構築してください",
     "Cache write": "キャッシュ書き込み",
     "Cache Write": "キャッシュ書き込み",
     "Cache Write (1h)": "キャッシュ書込 (1h)",

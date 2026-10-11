@@ -949,6 +949,7 @@
     "Cache Read": "Cache Read",
     "Cache read price": "Cache read price",
     "Cache repeated prompt prefixes for cheaper, faster reuse": "Cache repeated prompt prefixes for cheaper, faster reuse",
+    "Cache statistics need rebuilding": "Cache statistics need rebuilding",
     "Cache write": "Cache write",
     "Cache Write": "Cache Write",
     "Cache Write (1h)": "Cache Write (1h)",

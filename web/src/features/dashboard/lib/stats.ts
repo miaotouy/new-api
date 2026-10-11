@@ -16,7 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { QuotaDataItem } from '@/features/dashboard/types'
+import type {
+  QuotaDataItem,
+  TokenUsageDataItem,
+} from '@/features/dashboard/types'
 
 /**
  * Safe division: handles NaN and Infinity cases
@@ -44,4 +47,32 @@ export function calculateDashboardStats(data: QuotaDataItem[]) {
     }),
     { totalQuota: 0, totalCount: 0, totalTokens: 0 }
   )
+}
+
+export function calculateTokenUsageStats(data: TokenUsageDataItem[]) {
+  return data.reduce(
+    (acc, item) => ({
+      inputTokens: acc.inputTokens + (Number(item.input_tokens) || 0),
+      cachedTokens: acc.cachedTokens + (Number(item.cached_tokens) || 0),
+      totalTokens:
+        acc.totalTokens +
+        (Number(item.input_tokens) || 0) +
+        (Number(item.output_tokens) || 0),
+    }),
+    { inputTokens: 0, cachedTokens: 0, totalTokens: 0 }
+  )
+}
+
+export function calculateCacheHitRate(
+  inputTokens: number,
+  cachedTokens: number
+): number | null {
+  if (
+    !Number.isFinite(inputTokens) ||
+    inputTokens <= 0 ||
+    !Number.isFinite(cachedTokens)
+  ) {
+    return null
+  }
+  return Math.max(0, (cachedTokens / inputTokens) * 100)
 }

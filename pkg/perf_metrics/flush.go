@@ -18,16 +18,18 @@ func flushLoop() {
 		if !setting.Enabled {
 			continue
 		}
-		flushCompletedBuckets()
+		flushBuckets()
 		cleanupExpiredMetrics(setting.RetentionDays)
 	}
 }
 
-func flushCompletedBuckets() {
+func flushBuckets() {
+	persistenceLock.Lock()
+	defer persistenceLock.Unlock()
 	currentBucket := bucketStart(time.Now().Unix())
 	hotBuckets.Range(func(key, value any) bool {
 		k := key.(bucketKey)
-		if k.bucketTs >= currentBucket {
+		if k.bucketTs > currentBucket {
 			return true
 		}
 

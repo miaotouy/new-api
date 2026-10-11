@@ -27,6 +27,7 @@ import { useTheme } from '@/context/theme-provider'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import { DASHBOARD_VALUE_AXIS_WIDTH } from '@/features/dashboard/constants'
 import { getDashboardChartColors } from '@/features/dashboard/lib/charts'
+import { calculateCacheHitRate } from '@/features/dashboard/lib/stats'
 import type { TokenUsageDataItem } from '@/features/dashboard/types'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
@@ -159,10 +160,7 @@ function buildTokenChartData(
           ) => {
             const input = Number(items[0]?.datum?.InputTokens) || 0
             const cached = Number(items[0]?.datum?.CachedTokens) || 0
-            const rate =
-              input > 0
-                ? Math.min(100, Math.max(0, (cached / input) * 100))
-                : null
+            const rate = calculateCacheHitRate(input, cached)
             return [
               ...items.map((item) => ({
                 ...item,
@@ -172,6 +170,14 @@ function buildTokenChartData(
                 key: t('Cache Hit Rate'),
                 value: rate === null ? '--' : `${rate.toFixed(1)}%`,
               },
+              ...(cached > input
+                ? [
+                    {
+                      key: t('Cache statistics need rebuilding'),
+                      value: '',
+                    },
+                  ]
+                : []),
             ]
           },
         },

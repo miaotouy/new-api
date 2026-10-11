@@ -51,7 +51,7 @@ func UpsertPerfMetric(metric *PerfMetric) error {
 func GetPerfMetrics(modelName string, group string, startTs int64, endTs int64) ([]PerfMetric, error) {
 	var metrics []PerfMetric
 	query := DB.Model(&PerfMetric{}).
-		Where("model_name = ? AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs)
+		Where("LOWER(model_name) = LOWER(?) AND bucket_ts >= ? AND bucket_ts <= ?", modelName, startTs, endTs)
 	if group != "" {
 		query = query.Where(commonGroupCol+" = ?", group)
 	}

@@ -65,7 +65,7 @@ export const ModelCardGrid = memo(function ModelCardGrid(
   const perfMap = useMemo(() => {
     const map = new Map<string, ModelPerfBadgeData>()
     for (const model of perfQuery.data?.data?.models ?? []) {
-      map.set(model.model_name, {
+      map.set(model.model_name.toLowerCase(), {
         ...model,
         window_start: perfQuery.data?.data.window_start,
         window_end: perfQuery.data?.data.window_end,
@@ -90,7 +90,7 @@ export const ModelCardGrid = memo(function ModelCardGrid(
             usdExchangeRate={props.usdExchangeRate}
             showRechargePrice={props.showRechargePrice}
             selectedGroup={props.selectedGroup}
-            perf={perfMap.get(model.model_name || '')}
+            perf={perfMap.get((model.model_name || '').toLowerCase())}
             onClick={props.onModelClick}
           />
         ))}

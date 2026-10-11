@@ -949,6 +949,7 @@
     "Cache Read": "Đọc bộ nhớ đệm",
     "Cache read price": "Giá đọc cache",
     "Cache repeated prompt prefixes for cheaper, faster reuse": "Lưu cache phần đầu lời nhắc lặp lại để tái sử dụng nhanh và rẻ hơn",
+    "Cache statistics need rebuilding": "Hãy tạo lại thống kê bộ nhớ đệm",
     "Cache write": "Ghi cache",
     "Cache Write": "Ghi bộ nhớ đệm",
     "Cache Write (1h)": "Ghi cache (1h)",

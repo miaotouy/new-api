@@ -88,6 +88,35 @@ afterEach(() => {
 })
 
 describe('model cards', () => {
+  it('matches canonical performance data to mixed-case models while preserving the requested model ID', async () => {
+    queryClient.setQueryData(['perf-metrics-summary', 24], {
+      success: true,
+      data: {
+        models: [
+          {
+            model_name: 'example-model',
+            success_rate: 98,
+            avg_latency_ms: 1200,
+            avg_tps: 42,
+          },
+        ],
+      },
+    })
+    const onModelClick = vi.fn()
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ModelCardGrid
+          models={[pricingModel({ model_name: 'EXAMPLE-MODEL' })]}
+          onModelClick={onModelClick}
+        />
+      </QueryClientProvider>
+    )
+    expect(screen.getByText('98.00%')).toBeVisible()
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Details' }))
+    expect(onModelClick).toHaveBeenCalledWith('EXAMPLE-MODEL')
+  })
   it('shows separate generic and image cache prices including a free image cache', () => {
     render(
       <CachedPriceCell
