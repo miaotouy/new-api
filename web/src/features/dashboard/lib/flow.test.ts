@@ -738,6 +738,47 @@ describe('dashboard flow data', () => {
     ])
   })
 
+  test.each([
+    {
+      theme: 'light' as const,
+      labelColor: '#475569',
+      highlightedStroke: 'rgba(15, 23, 42, 0.74)',
+      activeStroke: 'rgba(15, 23, 42, 0.68)',
+    },
+    {
+      theme: 'dark' as const,
+      labelColor: '#e2e8f0',
+      highlightedStroke: 'rgba(226, 232, 240, 0.74)',
+      activeStroke: 'rgba(226, 232, 240, 0.68)',
+    },
+  ])(
+    'uses readable labels and node outlines in the $theme theme',
+    ({ theme, labelColor, highlightedStroke, activeStroke }) => {
+      const result = buildDashboardFlowData(rows, 'quota', {
+        role: 'root',
+        activeNode: { kind: 'user', id: 'user:1' },
+      })
+      const flowSpec = buildFlowSankeySpec(
+        result.flow,
+        'Flow',
+        undefined,
+        undefined,
+        theme
+      )
+      const highlightedNode = flowSpec.data[0].values[0].nodes.find(
+        (node: Record<string, unknown>) => node.key === 'user:1'
+      )
+
+      expect(flowSpec.theme).toBe(theme)
+      expect(flowSpec.label.style.fill).toBe(labelColor)
+      expect(flowSpec.node.style.stroke(highlightedNode)).toBe(
+        highlightedStroke
+      )
+      expect(flowSpec.node.state.hover.stroke).toBe(activeStroke)
+      expect(flowSpec.node.state.selected.stroke).toBe(activeStroke)
+    }
+  )
+
   test('maps active flow highlight states into the Sankey spec', () => {
     const result = buildDashboardFlowData(rows, 'quota', {
       role: 'root',

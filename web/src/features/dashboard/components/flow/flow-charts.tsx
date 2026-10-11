@@ -454,17 +454,23 @@ export function FlowCharts(props: FlowChartsProps) {
     chartInstanceRef.current?.clearState('blur')
   }, [])
   const chartTitle = t('Flow')
+  const chartTheme = resolvedTheme === 'dark' ? 'dark' : 'light'
   const flowSpec = useMemo(
     () =>
-      buildFlowSankeySpec(flowData.flow, chartTitle, formatQuota, {
-        quota: t('Quota'),
-        tokens: t('Tokens'),
-        requests: t('Requests'),
-        share: t('Share'),
-      }),
-    [chartTitle, flowData.flow, t]
+      buildFlowSankeySpec(
+        flowData.flow,
+        chartTitle,
+        formatQuota,
+        {
+          quota: t('Quota'),
+          tokens: t('Tokens'),
+          requests: t('Requests'),
+          share: t('Share'),
+        },
+        chartTheme
+      ),
+    [chartTitle, chartTheme, flowData.flow, t]
   )
-  const chartTheme = resolvedTheme === 'dark' ? 'dark' : 'light'
   const chartKey = [
     metric,
     topNodeLimit,
@@ -496,7 +502,6 @@ export function FlowCharts(props: FlowChartsProps) {
       key={`flow-${chartKey}`}
       spec={{
         ...flowSpec,
-        theme: chartTheme,
         background: 'transparent',
       }}
       option={VCHART_OPTION}
