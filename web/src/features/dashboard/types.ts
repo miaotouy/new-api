@@ -263,7 +263,16 @@ export interface ProcessedChartData {
   totalCountDisplay: string
 }
 
+export interface UserChartRow {
+  User: string
+  rawQuota: number
+  Usage: number
+  Time?: string
+}
+
 export interface ProcessedUserChartData {
+  rankData: UserChartRow[]
+  trendData: UserChartRow[]
   spec_user_rank: VChartSpec
   spec_user_trend: VChartSpec
 }

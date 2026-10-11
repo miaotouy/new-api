@@ -807,6 +807,8 @@ export function processUserChartData(
     metric === 'tokens' ? raw : Number((raw / quotaPerUnit).toFixed(4))
 
   const emptyResult: ProcessedUserChartData = {
+    rankData: [],
+    trendData: [],
     spec_user_rank: {
       type: 'bar',
       data: [{ id: 'userRankData', values: [] }],
@@ -911,6 +913,8 @@ export function processUserChartData(
   })
 
   return {
+    rankData: rankValues,
+    trendData: trendValues,
     spec_user_rank: {
       type: 'bar',
       data: [{ id: 'userRankData', values: rankValues }],

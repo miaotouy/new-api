@@ -61,6 +61,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { getFlowQuotaDates } from '@/features/dashboard/api'
+import { DashboardExportButton } from '@/features/dashboard/components/ui/dashboard-export-button'
 import {
   buildDashboardFlowData,
   buildFlowSankeySpec,
@@ -70,6 +71,7 @@ import {
   getDefaultDays,
   getFlowStages,
 } from '@/features/dashboard/lib'
+import { buildFlowExportDataset } from '@/features/dashboard/lib/export'
 import {
   compactFlowSelectionLabel,
   flowDisplayState,
@@ -333,6 +335,7 @@ export function FlowCharts(props: FlowChartsProps) {
   const {
     data: flowRows,
     error: flowError,
+    isFetching,
     isError,
     isLoading,
   } = useQuery({
@@ -665,6 +668,13 @@ export function FlowCharts(props: FlowChartsProps) {
               />
             </div>
           )}
+          <DashboardExportButton
+            filename='dashboard-flow'
+            disabled={isFetching || isError || flowData.flow.links.length === 0}
+            getDatasets={() => [
+              buildFlowExportDataset(flowData.flow, chartTitle, t),
+            ]}
+          />
           {isLoading && (
             <Loader2 className='text-muted-foreground size-4 animate-spin' />
           )}

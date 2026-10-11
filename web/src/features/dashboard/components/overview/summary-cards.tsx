@@ -29,12 +29,18 @@ import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
-import { formatNumber, formatQuota } from '@/lib/format'
+import {
+  formatNumber,
+  formatQuota,
+  formatTimestamp,
+  quotaUnitsToDollars,
+} from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { DashboardExportButton } from '../ui/dashboard-export-button'
 import { StatCard } from '../ui/stat-card'
 
 const SUMMARY_SPARKLINE_BUCKETS = 12
@@ -265,6 +271,63 @@ export function SummaryCards() {
                 {t('Monitor balance, usage, and request volume')}
               </p>
             </div>
+            <DashboardExportButton
+              filename='dashboard-overview'
+              disabled={
+                loading ||
+                !user ||
+                usageTrendQuery.isFetching ||
+                usageTrendQuery.isError
+              }
+              getDatasets={() => [
+                {
+                  name: t('Usage at a glance'),
+                  columns: [
+                    { key: 'name', label: t('Name') },
+                    { key: 'value', label: t('Value') },
+                    { key: 'unit', label: t('Unit') },
+                  ],
+                  rows: [
+                    [
+                      t('Credit remaining'),
+                      quotaUnitsToDollars(remainQuota),
+                      getCurrencyLabel(),
+                    ],
+                    [
+                      t('Last 24h usage'),
+                      quotaUnitsToDollars(recentUsage),
+                      getCurrencyLabel(),
+                    ],
+                    [
+                      t('Historical Usage'),
+                      quotaUnitsToDollars(usedQuota),
+                      getCurrencyLabel(),
+                    ],
+                    [t('Requests'), requestCount, t('Requests')],
+                  ],
+                },
+                {
+                  name: t('Last 24h usage'),
+                  columns: [
+                    { key: 'time', label: t('Time') },
+                    { key: 'model', label: t('Model') },
+                    { key: 'requests', label: t('Requests') },
+                    {
+                      key: 'quota',
+                      label: `${t('Quota')} (${getCurrencyLabel()})`,
+                    },
+                    { key: 'tokens', label: t('Tokens') },
+                  ],
+                  rows: (usageTrendQuery.data?.data ?? []).map((item) => [
+                    formatTimestamp(item.created_at),
+                    item.model_name,
+                    item.count,
+                    item.quota == null ? null : quotaUnitsToDollars(item.quota),
+                    item.token_used,
+                  ]),
+                },
+              ]}
+            />
           </div>
           <StaggerContainer className='grid grid-cols-3 gap-1.5 sm:gap-3'>
             {items.map((it) => (

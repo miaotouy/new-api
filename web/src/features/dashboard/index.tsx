@@ -31,6 +31,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { getCurrencyLabel } from '@/lib/currency'
+import { formatTimestamp, quotaUnitsToDollars } from '@/lib/format'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -38,6 +40,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
+import { DashboardExportButton } from './components/ui/dashboard-export-button'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildChartTimePoints,
@@ -209,8 +212,8 @@ export function Dashboard() {
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [tokenData, setTokenData] = useState<TokenUsageDataItem[]>([])
-  const [dataLoading, setDataLoading] = useState(false)
-  const [tokenDataLoading, setTokenDataLoading] = useState(false)
+  const [dataLoading, setDataLoading] = useState(true)
+  const [tokenDataLoading, setTokenDataLoading] = useState(true)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
@@ -240,10 +243,14 @@ export function Dashboard() {
   )
 
   const handleFilterChange = useCallback((filters: DashboardFilters) => {
+    setDataLoading(true)
+    setTokenDataLoading(true)
     setModelFilters(filters)
   }, [])
 
   const handleResetFilters = useCallback(() => {
+    setDataLoading(true)
+    setTokenDataLoading(true)
     setModelFilters(buildDefaultDashboardFilters(chartPreferences))
   }, [chartPreferences])
 
@@ -265,6 +272,8 @@ export function Dashboard() {
 
   const handleChartPreferencesChange = useCallback(
     (preferences: DashboardChartPreferences) => {
+      setDataLoading(true)
+      setTokenDataLoading(true)
       setChartPreferences(preferences)
       setModelFilters(buildDefaultDashboardFilters(preferences))
       saveChartPreferences(preferences)
@@ -283,6 +292,10 @@ export function Dashboard() {
   )
   const handleSectionChange = useCallback(
     (section: string) => {
+      if (section === 'models') {
+        setDataLoading(true)
+        setTokenDataLoading(true)
+      }
       void navigate({
         to: '/dashboard/$section',
         params: { section: section as DashboardSectionId },
@@ -295,6 +308,62 @@ export function Dashboard() {
   const modelActions =
     activeSection === 'models' ? (
       <>
+        <DashboardExportButton
+          filename='dashboard-models'
+          disabled={
+            dataLoading ||
+            tokenDataLoading ||
+            (modelData.length === 0 && tokenData.length === 0)
+          }
+          getDatasets={() => {
+            const commonColumns = [
+              { key: 'time', label: t('Time') },
+              { key: 'user', label: t('User') },
+              { key: 'model', label: t('Model') },
+            ]
+            return [
+              {
+                name: t('Model Call Analytics'),
+                columns: [
+                  ...commonColumns,
+                  { key: 'requests', label: t('Requests') },
+                  {
+                    key: 'quota',
+                    label: `${t('Quota')} (${getCurrencyLabel()})`,
+                  },
+                  { key: 'tokens', label: t('Tokens') },
+                ],
+                rows: modelData.map((item) => [
+                  formatTimestamp(item.created_at),
+                  item.username,
+                  item.model_name,
+                  item.count,
+                  item.quota == null ? null : quotaUnitsToDollars(item.quota),
+                  item.token_used,
+                ]),
+              },
+              {
+                name: t('Token Usage'),
+                columns: [
+                  ...commonColumns,
+                  { key: 'input_tokens', label: t('Input Tokens') },
+                  { key: 'output_tokens', label: t('Output Tokens') },
+                  { key: 'cached_tokens', label: t('Cached Tokens') },
+                  { key: 'tokens', label: t('Tokens') },
+                ],
+                rows: tokenData.map((item) => [
+                  formatTimestamp(item.created_at),
+                  item.username,
+                  item.model_name,
+                  item.input_tokens,
+                  item.output_tokens,
+                  item.cached_tokens,
+                  item.token_used,
+                ]),
+              },
+            ]
+          }}
+        />
         <ModelsChartPreferences
           preferences={chartPreferences}
           onPreferencesChange={handleChartPreferencesChange}

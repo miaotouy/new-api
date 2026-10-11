@@ -28,6 +28,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
+import { DashboardExportButton } from '@/features/dashboard/components/ui/dashboard-export-button'
 import {
   DASHBOARD_METRIC_OPTIONS,
   TIME_GRANULARITY_OPTIONS,
@@ -43,6 +44,8 @@ import type {
   ProcessedUserChartData,
   UserChartsFilters,
 } from '@/features/dashboard/types'
+import { getCurrencyLabel } from '@/lib/currency'
+import { quotaUnitsToDollars } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -151,7 +154,12 @@ export function UserCharts(props: UserChartsProps) {
     updateTheme()
   }, [resolvedTheme])
 
-  const { data: userData, isLoading } = useQuery({
+  const {
+    data: userData,
+    isLoading,
+    isFetching,
+    isError,
+  } = useQuery({
     queryKey: ['dashboard', 'user-quota', timeRange],
     queryFn: async () =>
       requireServerSuccess(await getUserQuotaDataByUsers(timeRange)),
@@ -253,6 +261,39 @@ export function UserCharts(props: UserChartsProps) {
           </TabsList>
         </Tabs>
 
+        <DashboardExportButton
+          filename='dashboard-users'
+          disabled={isFetching || isError || chartData.rankData.length === 0}
+          getDatasets={() =>
+            USER_CHARTS.map((chart) => {
+              const rows =
+                chart.value === 'rank'
+                  ? chartData.rankData
+                  : chartData.trendData
+              return {
+                name: t(chart.labelKey),
+                columns: [
+                  { key: 'time', label: t('Time') },
+                  { key: 'user', label: t('User') },
+                  {
+                    key: 'usage',
+                    label:
+                      metric === 'quota'
+                        ? `${t('Quota')} (${getCurrencyLabel()})`
+                        : t('Tokens'),
+                  },
+                ],
+                rows: rows.map((row) => [
+                  row.Time,
+                  row.User,
+                  metric === 'quota'
+                    ? quotaUnitsToDollars(row.rawQuota)
+                    : row.rawQuota,
+                ]),
+              }
+            })
+          }
+        />
         {isLoading && (
           <Loader2 className='text-muted-foreground size-4 animate-spin' />
         )}

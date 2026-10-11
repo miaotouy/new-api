@@ -277,3 +277,43 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     }
   })
 })
+
+describe('user analytics export data', () => {
+  test('ranking and trend exports share the displayed metric, Top users, and time buckets', () => {
+    const data: QuotaDataItem[] = [
+      { username: 'alice', created_at: BASE, quota: 500000, token_used: 20 },
+      {
+        username: 'alice',
+        created_at: BASE + HOUR,
+        quota: 500000,
+        token_used: 30,
+      },
+      { username: 'bob', created_at: BASE, quota: 2000000, token_used: 10 },
+    ]
+    const tokens = processUserChartData(data, 'hour', undefined, 1, 'tokens')
+    expect(tokens.rankData).toEqual([
+      { User: 'alice', rawQuota: 50, Usage: 50 },
+    ])
+    expect(tokens.trendData).toEqual([
+      {
+        Time: formatChartTime(BASE, 'hour'),
+        User: 'alice',
+        rawQuota: 20,
+        Usage: 20,
+      },
+      {
+        Time: formatChartTime(BASE + HOUR, 'hour'),
+        User: 'alice',
+        rawQuota: 30,
+        Usage: 30,
+      },
+    ])
+    expect(tokens.rankData).toEqual(tokens.spec_user_rank.data[0].values)
+    expect(tokens.trendData).toEqual(tokens.spec_user_trend.data[0].values)
+
+    const quota = processUserChartData(data, 'day', undefined, 1, 'quota')
+    expect(quota.rankData.map((row) => row.User)).toEqual(['bob'])
+    expect(quota.rankData).toEqual(quota.spec_user_rank.data[0].values)
+    expect(quota.trendData).toEqual(quota.spec_user_trend.data[0].values)
+  })
+})
