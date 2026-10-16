@@ -163,7 +163,9 @@ interface StreamTpsCellProps {
   isTask?: boolean
   /** The task request returned its result inline, so it is a synchronous call. */
   isSyncTask?: boolean
-  tokensPerSecond?: number | null
+  useTimeSec: number
+  completionTokens: number
+  frtMs?: number
   streamStatus?: LogOtherData['stream_status']
   className?: string
 }
@@ -172,10 +174,26 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
   const { t } = useTranslation()
   const showStreamError =
     props.isStream && props.streamStatus && props.streamStatus.status !== 'ok'
+  let generationSeconds = props.useTimeSec
+  // Older logs and second-resolution durations can have unusable first-token
+  // timings. Keep the full duration as the fallback for those records.
+  if (
+    props.isStream &&
+    props.frtMs != null &&
+    props.frtMs > 0 &&
+    props.frtMs < props.useTimeSec * 1000
+  ) {
+    generationSeconds -= props.frtMs / 1000
+  }
+  const tokensPerSecond =
+    Number.isFinite(generationSeconds) &&
+    generationSeconds > 0 &&
+    Number.isFinite(props.completionTokens) &&
+    props.completionTokens > 0
+      ? props.completionTokens / generationSeconds
+      : null
   const tpsLabel =
-    props.tokensPerSecond != null
-      ? `${Math.round(props.tokensPerSecond)} t/s`
-      : '—'
+    tokensPerSecond != null ? `${Math.round(tokensPerSecond)} t/s` : '—'
   let streamLabel = props.isStream ? t('Stream') : t('Non-stream')
   if (props.isTask) {
     streamLabel = props.isSyncTask ? t('Sync') : t('Async')
@@ -219,8 +237,7 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
           </TooltipProvider>
         )}
       </span>
-      {(!props.compact ||
-        (props.isStream && props.tokensPerSecond != null)) && (
+      {(!props.compact || (props.isStream && tokensPerSecond != null)) && (
         <span className='text-muted-foreground/60 px-0.5 tabular-nums'>
           {tpsLabel}
         </span>

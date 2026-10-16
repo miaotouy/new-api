@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  flexRender,
   getCoreRowModel,
   useReactTable,
   type VisibilityState,
@@ -57,6 +58,7 @@ const log = usageLogSchema.parse({
 
 function Fixture(props: {
   admin?: boolean
+  desktop?: boolean
   visibility?: VisibilityState
   logs?: UsageLog[]
   loading?: boolean
@@ -74,11 +76,24 @@ function Fixture(props: {
       <button type='button' onClick={() => context.setSensitiveVisible(false)}>
         Hide sensitive data
       </button>
-      <UsageLogsMobileList
-        table={table}
-        logCategory='common'
-        isLoading={props.loading}
-      />
+      {props.desktop ? (
+        table.getRowModel().rows.map((row) => {
+          const cell = row
+            .getAllCells()
+            .find((cell) => cell.column.id === 'is_stream')
+          return cell ? (
+            <div key={row.id}>
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </div>
+          ) : null
+        })
+      ) : (
+        <UsageLogsMobileList
+          table={table}
+          logCategory='common'
+          isLoading={props.loading}
+        />
+      )}
     </>
   )
 }
@@ -337,3 +352,81 @@ it('shows loading placeholders without displaying stale log fields', () => {
     screen.queryByRole('button', { name: /^Model:/ })
   ).not.toBeInTheDocument()
 })
+
+it.each([true, false])(
+  'uses generation time for streaming throughput in the desktop=%s log view',
+  (desktop) => {
+    renderLogs({
+      desktop,
+      logs: [
+        {
+          ...log,
+          is_stream: true,
+          use_time: 10,
+          completion_tokens: 300,
+          other: JSON.stringify({ frt: 2500 }),
+        },
+      ],
+    })
+    expect(screen.getByText('40 t/s')).toBeVisible()
+  }
+)
+
+it.each([
+  { name: 'missing first-token latency', frt: undefined },
+  { name: 'unset first-token sentinel', frt: -1000 },
+  { name: 'first-token latency equal to total duration', frt: 10000 },
+  { name: 'first-token latency longer than total duration', frt: 10500 },
+])('falls back to total duration for $name', ({ frt }) => {
+  renderLogs({
+    desktop: true,
+    logs: [
+      {
+        ...log,
+        is_stream: true,
+        use_time: 10,
+        completion_tokens: 300,
+        other: JSON.stringify({ frt }),
+      },
+    ],
+  })
+  expect(screen.getByText('30 t/s')).toBeVisible()
+})
+
+it('keeps non-streaming throughput based on total duration', () => {
+  renderLogs({
+    desktop: true,
+    logs: [
+      {
+        ...log,
+        is_stream: false,
+        use_time: 10,
+        completion_tokens: 300,
+        other: JSON.stringify({ frt: 2500 }),
+      },
+    ],
+  })
+  expect(screen.getByText('30 t/s')).toBeVisible()
+})
+
+it.each([
+  { name: 'zero duration', use_time: 0, completion_tokens: 300 },
+  { name: 'zero output tokens', use_time: 10, completion_tokens: 0 },
+])(
+  'shows unavailable throughput for $name',
+  ({ use_time, completion_tokens }) => {
+    renderLogs({
+      desktop: true,
+      logs: [
+        {
+          ...log,
+          is_stream: true,
+          use_time,
+          completion_tokens,
+          other: JSON.stringify({ frt: 2500 }),
+        },
+      ],
+    })
+    expect(screen.getByText('—')).toBeVisible()
+  }
+)
