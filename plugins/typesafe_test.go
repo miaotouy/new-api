@@ -49,12 +49,8 @@ func typeSafeSystemOneRequest() map[string]any {
 func TestBuiltInTypeSafeSystemOneContract(t *testing.T) {
 	plugin, registry := loadBuiltinPlugin(t, "typesafe")
 
-	binding, found := registry.Generation().LookupDeclaredRoute("POST", "/v1/systemone")
-	require.True(t, found)
-	assert.Same(t, plugin, binding.Plugin)
-	assert.Equal(t, jsplugin.RouteTypeSubmit, binding.Route.Type)
-	require.NotNil(t, binding.Route.RetainResult)
-	assert.False(t, *binding.Route.RetainResult, "a synchronous evaluation stores no task snapshot")
+	_, found := registry.Generation().LookupDeclaredRoute("POST", "/v1/systemone")
+	assert.False(t, found, "the main relay owns synchronous decisions")
 
 	require.Equal(t, []string{"jev-1.13.0", "jev-latest", "jev-preview"}, plugin.Meta.Models)
 	assert.True(t, plugin.Meta.SupportsUpstream(jsplugin.UpstreamKindNewAPI))

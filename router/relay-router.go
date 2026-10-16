@@ -124,6 +124,11 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
 
+		// Shared synchronous decision protocol, including TypeSafe SDK compatibility.
+		for _, path := range []string{"/decisions", "/systemone", "/alpha/decisions"} {
+			httpRouter.POST(path, func(c *gin.Context) { controller.Relay(c, types.RelayFormatDecisions) })
+		}
+
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatEmbedding)
@@ -173,6 +178,13 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 	}
 
+	// OpenRouter SDKs use an unversioned alpha endpoint.
+	decisionRouter := router.Group("")
+	decisionRouter.Use(middleware.RouteTag("relay"), middleware.SystemPerformanceCheck(), middleware.TokenAuth(), middleware.TokenRateLimit(), middleware.ModelRequestRateLimit(), middleware.Distribute())
+	for _, path := range []string{"/alpha/decisions", "/api/alpha/decisions"} {
+		decisionRouter.POST(path, func(c *gin.Context) { controller.Relay(c, types.RelayFormatDecisions) })
+	}
+
 	relayMjRouter := router.Group("/mj")
 	relayMjRouter.Use(middleware.RouteTag("relay"))
 	relayMjRouter.Use(middleware.SystemPerformanceCheck())
@@ -183,7 +195,6 @@ func SetRelayRouter(router *gin.Engine) {
 	relayMjModeRouter.Use(middleware.SystemPerformanceCheck())
 	registerMjRouterGroup(relayMjModeRouter)
 	//relayMjRouter.Use()
-
 
 	relayGeminiRouter := router.Group("/v1beta")
 	// :countTokens is not implemented. Answer it like an unregistered route

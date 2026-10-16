@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -123,4 +124,19 @@ func setupRelayRouterTestDB(t *testing.T) {
 			require.NoError(t, os.Unsetenv("SQL_DSN"))
 		}
 	})
+}
+
+func TestDecisionEndpointsRequireAPIToken(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	engine := gin.New()
+	SetRelayRouter(engine)
+	for _, path := range []string{"/v1/decisions", "/v1/systemone", "/v1/alpha/decisions", "/alpha/decisions", "/api/alpha/decisions"} {
+		t.Run(path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"m","state":"test","questions":{"q":{"type":"noul"}}}`))
+			request.Header.Set("Content-Type", "application/json")
+			engine.ServeHTTP(recorder, request)
+			assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+		})
+	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 )
@@ -36,6 +37,8 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 			meta.MaxTokens = int(lo.FromPtr(request.MaxOutputTokens))
 		case *dto.ClaudeRequest:
 			meta.MaxTokens = int(lo.FromPtr(request.MaxTokens))
+		case *dto.DecisionsRequest:
+			meta = request.GetTokenCountMeta()
 		case *dto.ImageRequest:
 			meta = request.GetTokenCountMeta()
 		}
@@ -55,6 +58,20 @@ func PrepareRequestBilling(c *gin.Context, info *relaycommon.RelayInfo) *types.N
 	tokens, err := service.EstimateRequestToken(c, meta, info)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeCountTokenFailed)
+	}
+	if request, ok := info.Request.(*dto.DecisionsRequest); ok {
+		tokens = max(tokens, len(request.RawBody))
+		if c.GetString("task_plugin_key") == "typesafe" {
+			info.InitChannelMeta(c)
+			mapped := *request
+			if err := helper.ModelMappedHelper(c, info, &mapped); err != nil {
+				return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+			}
+			_, hasProviderPrice := billing_setting.GetPluginBillingExpr("typesafe", info.OriginModelName)
+			if !helper.HasModelBillingConfig(info.OriginModelName) && !hasProviderPrice {
+				info.BillingModelName = mapped.Model
+			}
+		}
 	}
 	info.SetEstimatePromptTokens(tokens)
 

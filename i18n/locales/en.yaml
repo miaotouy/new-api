@@ -73,3 +73,7 @@ channel.upstream_update_added_models: "Added model examples (showing {{.Shown}}/
 channel.upstream_update_removed_models: "Removed model examples (showing {{.Shown}}/{{.Total}}): {{.Models}}"
 channel.upstream_update_failed_channels: "Failed channel IDs (showing {{.Shown}}/{{.Total}}): {{.Ids}}"
 channel.upstream_update_more_omitted: " ({{.Count}} more omitted)"
+
+relay.decisions_invalid_request: "Invalid decisions request: {{.Error}}"
+relay.decisions_invalid_response: "Invalid decisions response: {{.Error}}"
+relay.decisions_unsupported_channel: "This channel does not support decisions"

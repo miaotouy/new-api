@@ -216,3 +216,26 @@ func TestChannelSatisfiesFilters(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, dto.FilterRequestPath, kind)
 }
+
+func TestDecisionChannelsUseHostProtocolCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		channelType int
+		plugin      string
+		supported   bool
+	}{
+		{"openai", constant.ChannelTypeOpenAI, "", true},
+		{"openrouter", constant.ChannelTypeOpenRouter, "", true},
+		{"new api", constant.ChannelTypeNewAPI, "", true},
+		{"installed typesafe", constant.ChannelTypeTaskPlugin, "typesafe", true},
+		{"other task plugin", constant.ChannelTypeTaskPlugin, "other", false},
+		{"claude", constant.ChannelTypeAnthropic, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			channel := &Channel{Type: tc.channelType}
+			channel.SetSetting(kitdto.ChannelSettings{TaskPluginKey: tc.plugin})
+			matches, _ := ChannelSatisfiesFilters(channel, "any-model", []dto.ChannelFilter{{Kind: dto.FilterDecisions}})
+			assert.Equal(t, tc.supported, matches)
+		})
+	}
+}

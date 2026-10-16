@@ -349,6 +349,9 @@ func InjectTieredBillingInfo(other *model.LogOther, relayInfo *relaycommon.Relay
 	if snap == nil {
 		return
 	}
+	if len(snap.UsageFacts) > 0 {
+		other.SetPublic("usage_facts", snap.UsageFacts)
+	}
 	other.SetPublic("billing_mode", "tiered_expr")
 	other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
 	if result != nil {

@@ -48,6 +48,8 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 		err = relay.EmbeddingHelper(c, info)
 	case relayconstant.RelayModeResponses, relayconstant.RelayModeResponsesCompact:
 		err = relay.ResponsesHelper(c, info)
+	case relayconstant.RelayModeDecisions:
+		err = relay.DecisionsHelper(c, info)
 	case relayconstant.RelayModeAlphaSearch:
 		err = relay.AlphaSearchHelper(c, info)
 	default:
@@ -96,6 +98,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
 				helper.WssError(c, ws, newAPIError.ToOpenAIError(upstreamURLs...))
+			case types.RelayFormatDecisions:
+				if c.Request.URL.Path == "/v1/systemone" {
+					c.JSON(newAPIError.StatusCode, gin.H{"detail": newAPIError.ToOpenAIError(upstreamURLs...).Message})
+				} else {
+					c.JSON(newAPIError.StatusCode, gin.H{"error": newAPIError.ToOpenAIError(upstreamURLs...)})
+				}
 			case types.RelayFormatClaude:
 				c.JSON(newAPIError.StatusCode, gin.H{
 					"type":  "error",

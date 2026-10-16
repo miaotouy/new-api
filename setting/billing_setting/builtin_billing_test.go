@@ -148,3 +148,42 @@ func TestImageModelBuiltinPricesAndOverrides(t *testing.T) {
 		})
 	}
 }
+
+func TestDecisionBuiltinPricesAndOverrides(t *testing.T) {
+	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	saved := *settings
+	savedRatios, savedPrices := ratio_setting.ModelRatio2JSONString(), ratio_setting.ModelPrice2JSONString()
+	t.Cleanup(func() {
+		*settings = saved
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(savedRatios))
+		require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(savedPrices))
+	})
+	*settings = billing_setting.BillingSetting{BillingMode: map[string]string{}, BillingExpr: map[string]string{}}
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{}`))
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{}`))
+	for _, tc := range []struct {
+		model string
+		quota int
+	}{
+		{"respan/span-02", 10},
+		{"cloudflare/clef-omni", 150},
+		{"inception/mercury-decide:free", 0},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			expression, ok := billing_setting.GetBillingExpr(tc.model)
+			require.True(t, ok)
+			result, err := billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000}, billingexpr.TokenParams{P: 2000, C: 10000})
+			require.NoError(t, err)
+			assert.Equal(t, tc.quota, result.ActualQuotaAfterGroup, "input is priced per million; decision output is free")
+		})
+	}
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"respan/span-02":2}`))
+	assert.Equal(t, billing_setting.BillingModeRatio, billing_setting.GetBillingMode("respan/span-02"))
+	settings.BillingMode["cloudflare/clef-omni"] = billing_setting.BillingModeTieredExpr
+	settings.BillingExpr["cloudflare/clef-omni"] = `tier("custom", p * 1)`
+	expression, ok := billing_setting.GetBillingExpr("cloudflare/clef-omni")
+	require.True(t, ok)
+	result, err := billingexpr.ComputeTieredQuota(&billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000}, billingexpr.TokenParams{P: 2000})
+	require.NoError(t, err)
+	assert.Equal(t, 1000, result.ActualQuotaAfterGroup, "administrator expressions override decision defaults")
+}

@@ -10,7 +10,7 @@ export const meta = {
   key: "typesafe",
   name: "TypeSafe",
   sortPriority: 90,
-  version: "1.0.0",
+  version: "1.1.0",
   icon: "text:TS",
   author: { name: "QuantumNous", url: "https://github.com/QuantumNous" },
   website: "https://typesafe.ai",
@@ -23,16 +23,8 @@ export const meta = {
   models: MODELS,
   upstreams: ["vendor", "new_api"],
   fetchMode: "per_task",
-  routes: [
-    {
-      method: "POST",
-      path: "/v1/systemone",
-      type: "submit",
-      decode: "decodeSystemOne",
-      render: "renderSystemOne",
-      retainResult: false,
-    },
-  ],
+  // Synchronous decisions are served by the host relay.
+  routes: [],
   usageSchema: {
     input_tokens: {
       type: "number",

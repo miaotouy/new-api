@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -39,6 +40,8 @@ func GetAndValidateRequest(c *gin.Context, format types.RelayFormat) (request dt
 		request, err = GetAndValidateResponsesRequest(c)
 	case types.RelayFormatOpenAIResponsesCompaction:
 		request, err = GetAndValidateResponsesCompactionRequest(c)
+	case types.RelayFormatDecisions:
+		request, err = GetAndValidateDecisionsRequest(c)
 	case types.RelayFormatOpenAIAlphaSearch:
 		request, err = GetAndValidateAlphaSearchRequest(c)
 
@@ -147,6 +150,29 @@ func GetAndValidateResponsesRequest(c *gin.Context) (*dto.OpenAIResponsesRequest
 	if ExceedsMaxTokensLimit(request.MaxOutputTokens) {
 		return nil, errors.New("max_output_tokens is invalid")
 	}
+	return request, nil
+}
+
+func GetAndValidateDecisionsRequest(c *gin.Context) (*dto.DecisionsRequest, error) {
+	request := &dto.DecisionsRequest{}
+	if err := common.UnmarshalBodyReusable(c, request); err != nil {
+		return nil, errors.New(i18n.T(c, i18n.MsgRelayDecisionsInvalidRequest, map[string]any{"Error": err.Error()}))
+	}
+	if err := request.Validate(); err != nil {
+		return nil, errors.New(i18n.T(c, i18n.MsgRelayDecisionsInvalidRequest, map[string]any{"Error": err.Error()}))
+	}
+	if ExceedsMaxTokensLimit(request.MaxTokens, request.MaxCompletionTokens, request.MaxOutputTokens) {
+		return nil, errors.New("max_tokens is invalid")
+	}
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := storage.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	request.RawBody = raw
 	return request, nil
 }
 

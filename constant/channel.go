@@ -244,3 +244,16 @@ func IsAdvancedCustomChannel(channelType int) bool {
 		return false
 	}
 }
+
+// SupportsDecisions includes installed TypeSafe plugin channels that now use the
+// synchronous host relay. Other task plugins retain their own dispatch contract.
+func SupportsDecisions(channelType int, pluginKey string) bool {
+	switch channelType {
+	case ChannelTypeOpenAI, ChannelTypeOpenRouter, ChannelTypeNewAPI:
+		return true
+	case ChannelTypeTaskPlugin:
+		return pluginKey == "typesafe"
+	default:
+		return false
+	}
+}

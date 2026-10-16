@@ -75,7 +75,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	groupRatioInfo := HandleGroupRatio(c, info)
 
 	// Check if this model uses tiered_expr billing
-	if billing_setting.GetBillingMode(billingModelName) == billing_setting.BillingModeTieredExpr {
+	decisionOverride := false
+	if info.RelayFormat == types.RelayFormatDecisions && c.GetString("task_plugin_key") == "typesafe" {
+		_, decisionOverride = billing_setting.GetPluginBillingExpr("typesafe", billingModelName)
+	}
+	if decisionOverride || billing_setting.GetBillingMode(billingModelName) == billing_setting.BillingModeTieredExpr {
 		return modelPriceHelperTiered(c, info, billingModelName, promptTokens, groupRatioInfo)
 	}
 
@@ -336,6 +340,9 @@ func resolveBillingModelName(origin string) string {
 
 func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billingModelName string, promptTokens int, groupRatioInfo hosttypes.GroupRatioInfo) (hosttypes.PriceData, error) {
 	exprStr, ok := billing_setting.GetBillingExpr(billingModelName)
+	if info.RelayFormat == types.RelayFormatDecisions && c.GetString("task_plugin_key") == "typesafe" {
+		exprStr, ok = billing_setting.ResolveTaskBillingExpr("typesafe", billingModelName, "")
+	}
 	if !ok {
 		return hosttypes.PriceData{}, fmt.Errorf("model %s is configured as tiered_expr but has no billing expression", billingModelName)
 	}
@@ -360,6 +367,19 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		}
 	}
 
+	var decisionUsageKeys map[string]bool
+	if info.RelayFormat == types.RelayFormatDecisions {
+		decisionUsageKeys = billingexpr.UsedUsageKeys(exprStr)
+	}
+	decisionUsageBilling := len(decisionUsageKeys) > 0
+	if decisionUsageBilling {
+		for key := range decisionUsageKeys {
+			if key != "input_tokens" && key != "output_tokens" {
+				return hosttypes.PriceData{}, fmt.Errorf("unsupported decisions usage field %q", key)
+			}
+		}
+		requestInput.Usage = map[string]any{"input_tokens": promptTokens, "output_tokens": 0}
+	}
 	rawCost, trace, err := billingexpr.RunExprByHashWithRequest(exprStr, exprHash, billingexpr.TokenParams{
 		P:   float64(promptTokens),
 		C:   0,
@@ -371,6 +391,9 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 
 	// Expression coefficients are $/1M tokens prices; convert to quota the same way per-call billing does.
 	quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
+	if decisionUsageBilling {
+		quotaBeforeGroup = rawCost * common.QuotaPerUnit
+	}
 	// Scale the reservation, preserving the expression's context-length tier
 	// and leaving actual settlement and fixed request prices unchanged.
 	if trace.BillingUnit != billingexpr.BillingUnitRequest {
@@ -390,6 +413,8 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	}
 
 	snapshot := &billingexpr.BillingSnapshot{
+		TaskUsageBilling:          decisionUsageBilling,
+		UsageFacts:                requestInput.Usage,
 		EstimatedImageCount:       trace.ImageCount,
 		BillingMode:               billing_setting.BillingModeTieredExpr,
 		ModelName:                 billingModelName,

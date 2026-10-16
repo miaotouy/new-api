@@ -44,7 +44,13 @@ func Distribute() func(c *gin.Context) {
 			Kind:        taskdto.FilterRequestPath,
 			RequestPath: c.Request.URL.Path,
 		})
-		service.AppendTaskPluginIdentityFilter(c, c.GetString("expected_task_plugin_key"))
+		// The host serves legacy TypeSafe channels alongside ordinary decision
+		// channels; their plugin identity is checked below before any upstream call.
+		if relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeDecisions {
+			constraints.AddFilter(taskdto.ChannelFilter{Kind: taskdto.FilterDecisions})
+		} else {
+			service.AppendTaskPluginIdentityFilter(c, c.GetString("expected_task_plugin_key"))
+		}
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
 			abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
@@ -178,6 +184,9 @@ func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, ex
 		}
 	}
 	if expected == "" {
+		if c != nil && c.Request != nil && relayconstant.Path2RelayMode(c.Request.URL.Path) == relayconstant.RelayModeDecisions && channel.Type == constant.ChannelTypeTaskPlugin {
+			return channel.GetSetting().TaskPluginKey == "typesafe"
+		}
 		return channel.Type != constant.ChannelTypeTaskPlugin
 	}
 	if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {

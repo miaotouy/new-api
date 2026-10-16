@@ -74,3 +74,7 @@ channel.upstream_update_added_models: "新增模型範例（顯示 {{.Shown}}/{{
 channel.upstream_update_removed_models: "刪除模型範例（顯示 {{.Shown}}/{{.Total}}）：{{.Models}}"
 channel.upstream_update_failed_channels: "失敗管道 ID（顯示 {{.Shown}}/{{.Total}}）：{{.Ids}}"
 channel.upstream_update_more_omitted: "（其餘 {{.Count}} 個已省略）"
+
+relay.decisions_invalid_request: "決策請求無效：{{.Error}}"
+relay.decisions_invalid_response: "決策回應無效：{{.Error}}"
+relay.decisions_unsupported_channel: "此渠道暫不支援決策請求"

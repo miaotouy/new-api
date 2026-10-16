@@ -27,6 +27,14 @@ func TestChannelMatchesExpectedTaskPluginUsesGenericChannelSetting(t *testing.T)
 	assert.True(t, channelMatchesExpectedTaskPlugin(nil, channel, "generic-alpha"))
 	assert.False(t, channelMatchesExpectedTaskPlugin(nil, channel, "generic-beta"))
 	assert.False(t, channelMatchesExpectedTaskPlugin(nil, channel, ""))
+	c, _ := gin.CreateTestContext(nil)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/decisions", nil)
+	assert.False(t, channelMatchesExpectedTaskPlugin(c, channel, ""))
+	channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "typesafe"})
+	assert.True(t, channelMatchesExpectedTaskPlugin(c, channel, ""))
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	assert.False(t, channelMatchesExpectedTaskPlugin(c, channel, ""))
+
 }
 
 func TestChannelMatchesExpectedTaskPluginUsesPinnedLegacyIndex(t *testing.T) {

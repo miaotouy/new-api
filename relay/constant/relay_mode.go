@@ -49,6 +49,7 @@ const (
 	RelayModeResponsesCompact
 
 	RelayModeAlphaSearch
+	RelayModeDecisions
 )
 
 func Path2RelayMode(path string) int {
@@ -73,6 +74,8 @@ func Path2RelayMode(path string) int {
 		relayMode = RelayModeResponsesCompact
 	} else if strings.HasPrefix(path, "/v1/responses") {
 		relayMode = RelayModeResponses
+	} else if path == "/v1/decisions" || path == "/v1/systemone" || path == "/alpha/decisions" || path == "/api/alpha/decisions" || path == "/v1/alpha/decisions" {
+		relayMode = RelayModeDecisions
 	} else if strings.HasPrefix(path, "/v1/alpha/search") {
 		relayMode = RelayModeAlphaSearch
 	} else if strings.HasPrefix(path, "/v1/audio/speech") {

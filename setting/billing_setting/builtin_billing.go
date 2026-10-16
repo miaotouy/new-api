@@ -14,10 +14,38 @@ var builtinBillingExpr = map[string]string{
 	// channels filter service_tier by default, so it may not reach the upstream.
 	"gpt-6-astra": `len <= 272000 ? tier("standard", p * 10 + c * 50 + cr * 1 + cc * 12.5) : tier("long_context", p * 20 + c * 75 + cr * 2 + cc * 25)`,
 	// https://docs.typesafe.ai/models.md (Jev 1.13): $0.042 per million
-	// input tokens, output free. The typesafe task plugin measures the billed
-	// quantity as the input_tokens usage fact, so these are task usage prices
-	// in USD rather than a $/1M token rate.
+	// input tokens, output free. Retain the installed TypeSafe usage-expression
+	// contract in USD; the decisions relay supplies the same input_tokens fact.
 	"jev-1.13.0":  `tier("base", u("input_tokens") * 0.042 / 1000000)`,
 	"jev-latest":  `tier("base", u("input_tokens") * 0.042 / 1000000)`,
 	"jev-preview": `tier("base", u("input_tokens") * 0.042 / 1000000)`,
+	// OpenRouter decision model prices, USD per million tokens (2026-10-17).
+	// https://openrouter.ai/api/v1/models?output_modalities=decisions
+	"respan/span-02":                        `tier("base", p * 0.01)`,
+	"liquid/d1-ultra":                       `tier("base", p * 0.042)`,
+	"typesafe/jev-1.14":                     `tier("base", p * 0.042)`,
+	"~perplexity/pplx-decider-latest":       `tier("base", p * 0.02)`,
+	"scaledown/classify-1":                  `tier("base", p * 0.04)`,
+	"nace-ai/drex-v2.0":                     `tier("base", p * 0.06)`,
+	"microsoft/microsoft-decision-1":        `tier("base", p * 0.042)`,
+	"nace-ai/drex-v1.5":                     `tier("base", p * 0.04)`,
+	"cloudflare/clef-omni":                  `tier("base", p * 0.15)`,
+	"upstage/solar-decide-flash":            `tier("base", p * 0.05)`,
+	"perplexity/pplx-decider-v1.1-27b":      `tier("base", p * 0.02)`,
+	"openai/gpt-6-luna-decisions":           `tier("base", p * 0.1)`,
+	"liquid/d1":                             `tier("base", p * 0.02)`,
+	"cloudflare/clef-flash":                 `tier("base", p * 0.021)`,
+	"cloudflare/clef":                       `tier("base", p * 0.042)`,
+	"togethercomputer/tev1-4b-experimental": `tier("base", p * 0.042)`,
+	"inception/mercury-decide":              `tier("base", p * 0.02)`,
+	"inception/mercury-decide:free":         `tier("base", p * 0)`,
+	"upstage/solar-decide":                  `tier("base", p * 0.05)`,
+	"respan/span-01":                        `tier("base", p * 0.02)`,
+	"respan/span-01-lite":                   `tier("base", p * 0)`,
+	"respan/span-01-lite:free":              `tier("base", p * 0)`,
+	"jaredpalmer/kev-4b":                    `tier("base", p * 0.042)`,
+	"~typesafe/jev-latest":                  `tier("base", p * 0.042)`,
+	"typesafe/jev-1.13":                     `tier("base", p * 0.042)`,
+	"jev-1.13":                              `tier("base", p * 0.042)`,
+	"jev-1.14":                              `tier("base", p * 0.042)`,
 }
