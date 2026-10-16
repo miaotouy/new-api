@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,6 +30,25 @@ func CreateLogExport(c *gin.Context) {
 	if err := service.ValidateLogExportRequest(&request, role); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if request.Category == "common" {
+		if role < common.RoleAdminUser && !operation_setting.GetLogSetting().UserExportEnabled {
+			common.ApiErrorT(c, "Log export is disabled")
+			return
+		}
+		var startTimestamp, endTimestamp int64
+		if request.Filters.StartTimestamp != nil {
+			startTimestamp = *request.Filters.StartTimestamp
+		}
+		if request.Filters.EndTimestamp != nil {
+			endTimestamp = *request.Filters.EndTimestamp
+		}
+		startTimestamp, err := limitLogTimeRange(startTimestamp, endTimestamp)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		request.Filters.StartTimestamp = &startTimestamp
 	}
 	snapshotID, err := model.GetLogExportSnapshotID(request.Category)
 	if err != nil {

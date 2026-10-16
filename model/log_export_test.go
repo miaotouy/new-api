@@ -136,7 +136,7 @@ func TestLogExportQueriesUseStableCursorsAndSafeTaskProjection(t *testing.T) {
 		{Id: 4, UserId: 8105, CreatedAt: 102, Type: LogTypeConsume, ModelName: "gpt", RequestId: "other"},
 	}
 	require.NoError(t, LOG_DB.Create(&logs).Error)
-	pageLogs, _, err := GetUserLogs(8104, LogTypeConsume, 0, 101, "gpt", "", 0, 10, "", "", "")
+	pageLogs, _, err := GetUserLogs(8104, LogFilter{Type: LogTypeConsume, EndTimestamp: 101, ModelName: "gpt"}, 0, 10)
 	require.NoError(t, err)
 	exportLogs, err := GetLogsForExport(LogQueryParams{UserID: &logs[0].UserId, LogType: LogTypeConsume, EndTimestamp: 101, ModelName: "gpt"}, nil, 10)
 	require.NoError(t, err)

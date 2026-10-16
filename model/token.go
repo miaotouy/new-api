@@ -36,6 +36,8 @@ type Token struct {
 	RateLimitWindow    int            `json:"rate_limit_window_seconds"`
 	AutoGroups         string         `json:"-" gorm:"type:text"`
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
+	// 允许用此令牌查询所属用户的额度；新建令牌默认开启，已有令牌升级后保持关闭
+	AllowUserQuotaQuery bool `json:"allow_user_quota_query"`
 }
 
 func (token *Token) GetAutoGroups() ([]string, error) {
@@ -320,7 +322,8 @@ func (token *Token) Update() (err error) {
 	}
 	return DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry",
-		"route_mode", "auto_route_strategy", "max_ratio", "failover_enabled", "rate_limit", "rate_limit_window_seconds", "auto_groups").Updates(token).Error
+		"route_mode", "auto_route_strategy", "max_ratio", "failover_enabled", "rate_limit", "rate_limit_window_seconds", "auto_groups",
+		"allow_user_quota_query").Updates(token).Error
 }
 
 func (token *Token) SelectUpdate() (err error) {

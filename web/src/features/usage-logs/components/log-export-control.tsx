@@ -51,7 +51,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useStatus } from '@/hooks/use-status'
 import { getCurrencyDisplay } from '@/lib/currency'
+import { handleServerError } from '@/lib/handle-server-error'
+import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import {
@@ -135,7 +138,12 @@ export function LogExportControl<TData>({
   const { t, i18n } = useTranslation()
   const searchParams = route.useSearch() as Record<string, unknown>
   const queryClient = useQueryClient()
-  const { isAdminView } = useLogsViewScope()
+  const { isAdminView, canManageScope } = useLogsViewScope()
+  const { status } = useStatus()
+  const exportDisabled =
+    logCategory === 'common' &&
+    !canManageScope &&
+    status?.log_export_enabled === false
   const { sensitiveVisible } = useUsageLogsContext()
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
@@ -144,6 +152,7 @@ export function LogExportControl<TData>({
 
   const exportsQuery = useQuery({
     queryKey: ['log-exports', 'recent'],
+    enabled: !exportDisabled,
     queryFn: () => listLogExports(1, 20),
     refetchInterval: (query) => {
       const tasks = query.state.data?.data?.items ?? []
@@ -154,7 +163,7 @@ export function LogExportControl<TData>({
   const historyQuery = useQuery({
     queryKey: ['log-exports', 'history', historyPage],
     queryFn: () => listLogExports(historyPage, 20),
-    enabled: historyOpen,
+    enabled: historyOpen && !exportDisabled,
     placeholderData: (previousData) => previousData,
     refetchInterval: (query) => {
       const historyTasks = query.state.data?.data?.items ?? []
@@ -205,7 +214,7 @@ export function LogExportControl<TData>({
       }
       const result = await createLogExport(request)
       if (!result.success || !result.data) {
-        throw new Error(result.message || t('Failed to create export task'))
+        throw createServerError(result, 'Failed to create export task')
       }
       return result.data
     },
@@ -215,13 +224,7 @@ export function LogExportControl<TData>({
       void queryClient.invalidateQueries({ queryKey: ['log-exports'] })
     },
     onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? t(error.message, {
-              defaultValue: t('Failed to create export task'),
-            })
-          : t('Failed to create export task')
-      )
+      handleServerError(error, t('Failed to create export task'))
     },
   })
 
@@ -263,6 +266,8 @@ export function LogExportControl<TData>({
       )
     })
   }, [tasks, t])
+
+  if (exportDisabled) return null
 
   const handleDownload = async (task: LogExportTask) => {
     try {
