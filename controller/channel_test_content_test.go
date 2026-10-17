@@ -1,13 +1,19 @@
 package controller
 
 import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	hostdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,4 +97,54 @@ func TestGetChannelTestRequestConfigRejectsUnknownFields(t *testing.T) {
 
 	_, err := getChannelTestRequestConfig(channel)
 	require.ErrorContains(t, err, "unknown field")
+}
+
+// Protect the channel-test API's response preview for JSON, SSE, and failures,
+// including bounded output that never splits a UTF-8 character.
+func TestWriteChannelTestResultIncludesResponse(t *testing.T) {
+	const limit = 64 << 10
+	stream := "data: {\"choices\":[{\"delta\":{\"content\":\"你好\"}}]}\n\ndata: [DONE]\n\n"
+	for _, tc := range []struct {
+		name      string
+		body      string
+		want      string
+		truncated bool
+		failure   bool
+	}{
+		{name: "JSON", body: `{"choices":[{"message":{"content":"你好"}}]}`, want: `{"choices":[{"message":{"content":"你好"}}]}`},
+		{name: "SSE", body: stream, want: stream},
+		{name: "failed response", body: `{"error":{"message":"upstream failed"}}`, want: `{"error":{"message":"upstream failed"}}`, failure: true},
+		{name: "exact limit", body: strings.Repeat("a", limit), want: strings.Repeat("a", limit)},
+		{name: "UTF8 boundary", body: strings.Repeat("a", limit-1) + "你好", want: strings.Repeat("a", limit-1), truncated: true},
+		{name: "empty response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			result := testResult{endpointType: "openai", responseBody: []byte(tc.body)}
+			if tc.failure {
+				result.localErr = errors.New("upstream failed")
+			}
+			writeChannelTestResult(c, result, 1.25)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var response struct {
+				Success      bool    `json:"success"`
+				Message      string  `json:"message"`
+				Time         float64 `json:"time"`
+				EndpointType string  `json:"endpoint_type"`
+				Body         string  `json:"response_body"`
+				Truncated    bool    `json:"response_truncated"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Equal(t, !tc.failure, response.Success)
+			assert.Equal(t, 1.25, response.Time)
+			assert.Equal(t, "openai", response.EndpointType)
+			assert.Equal(t, tc.want, response.Body)
+			assert.Equal(t, tc.truncated, response.Truncated)
+			assert.True(t, utf8.ValidString(response.Body))
+			if tc.failure {
+				assert.Equal(t, "upstream failed", response.Message)
+			}
+		})
+	}
 }

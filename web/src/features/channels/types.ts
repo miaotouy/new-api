@@ -241,6 +241,8 @@ export interface ChannelTestConfigResponse {
 }
 
 export interface ChannelTestResponse {
+  response_body?: string
+  response_truncated?: boolean
   success: boolean
   message?: string
   error_code?: string

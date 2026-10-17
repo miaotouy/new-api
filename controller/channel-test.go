@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -43,6 +44,7 @@ type testResult struct {
 	localErr     error
 	newAPIError  *types.NewAPIError
 	endpointType string
+	responseBody []byte
 }
 
 func resolveChannelTestEndpoint(channel *model.Channel, modelName string, requestedEndpoint string) (constant.EndpointType, error) {
@@ -139,6 +141,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 	w := httptest.NewRecorder()
+	defer func() { result.responseBody = w.Body.Bytes() }()
 	c, _ := gin.CreateTestContext(w)
 
 	testModel = strings.TrimSpace(testModel)
@@ -818,46 +821,12 @@ func TestChannel(c *gin.Context) {
 	}
 	result := testChannel(requestCtx, channel, testUserID, testModel, endpointType, isStream)
 	if result.localErr != nil {
-		resp := gin.H{
-			"success": false,
-			"message": result.localErr.Error(),
-			"time":    0.0,
-		}
-		if result.newAPIError != nil {
-			resp["error_code"] = result.newAPIError.GetErrorCode()
-		}
-		if result.endpointType != "" {
-			resp["endpoint_type"] = result.endpointType
-		}
-		c.JSON(http.StatusOK, resp)
+		writeChannelTestResult(c, result, 0)
 		return
 	}
-	tok := time.Now()
-	milliseconds := tok.Sub(tik).Milliseconds()
+	milliseconds := time.Since(tik).Milliseconds()
 	go channel.UpdateResponseTime(milliseconds)
-	consumedTime := float64(milliseconds) / 1000.0
-	if result.newAPIError != nil {
-		response := gin.H{
-			"success":    false,
-			"message":    result.newAPIError.Error(),
-			"time":       consumedTime,
-			"error_code": result.newAPIError.GetErrorCode(),
-		}
-		if result.endpointType != "" {
-			response["endpoint_type"] = result.endpointType
-		}
-		c.JSON(http.StatusOK, response)
-		return
-	}
-	response := gin.H{
-		"success": true,
-		"message": "",
-		"time":    consumedTime,
-	}
-	if result.endpointType != "" {
-		response["endpoint_type"] = result.endpointType
-	}
-	c.JSON(http.StatusOK, response)
+	writeChannelTestResult(c, result, float64(milliseconds)/1000)
 }
 
 func getChannelForTest(c *gin.Context) (*model.Channel, int, bool) {
@@ -879,6 +848,19 @@ func getChannelForTest(c *gin.Context) (*model.Channel, int, bool) {
 
 func writeChannelTestResult(c *gin.Context, result testResult, consumedTime float64) {
 	response := gin.H{"success": result.localErr == nil && result.newAPIError == nil, "message": "", "time": consumedTime}
+	if len(result.responseBody) > 0 {
+		const maxResponseBytes = 64 << 10
+		end := min(len(result.responseBody), maxResponseBytes)
+		truncated := end < len(result.responseBody)
+		if truncated {
+			// Keep a complete UTF-8 character at the preview boundary.
+			for end > 0 && !utf8.RuneStart(result.responseBody[end]) {
+				end--
+			}
+		}
+		response["response_body"] = strings.ToValidUTF8(string(result.responseBody[:end]), "\uFFFD")
+		response["response_truncated"] = truncated
+	}
 	if result.endpointType != "" {
 		response["endpoint_type"] = result.endpointType
 	}

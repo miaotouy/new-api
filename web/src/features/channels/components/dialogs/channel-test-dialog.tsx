@@ -23,7 +23,6 @@ import type {
   Table as TanStackTable,
 } from '@tanstack/react-table'
 import {
-  Check,
   CheckCircle2,
   Copy,
   Gauge,
@@ -44,6 +43,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CopyButton } from '@/components/copy-button'
 import {
   DataTableBulkActions as BulkActionsToolbar,
   DataTablePagination,
@@ -118,6 +118,8 @@ type TestResult = {
   completedAt?: number
   error?: string
   errorCode?: string
+  responseBody?: string
+  responseTruncated?: boolean
 }
 
 type BatchProgress = {
@@ -213,10 +215,12 @@ type FailureStatusDisplay = {
   details?: string
 }
 
-type FailureDetailsState = {
+type TestDetailsState = {
   model: string
-  summary: string
+  summary?: string
   details: string
+  isResponse?: boolean
+  truncated?: boolean
 }
 
 function sleep(ms: number) {
@@ -346,8 +350,7 @@ function ChannelTestDialogContent({
   const [isDeleteFailedDialogOpen, setIsDeleteFailedDialogOpen] =
     useState(false)
   const [isDeletingFailed, setIsDeletingFailed] = useState(false)
-  const [failureDetails, setFailureDetails] =
-    useState<FailureDetailsState | null>(null)
+  const [testDetails, setTestDetails] = useState<TestDetailsState | null>(null)
   const [pagination, setPagination] = useState({
     pageIndex: 0,
     pageSize: 30,
@@ -410,7 +413,7 @@ function ChannelTestDialogContent({
     setRemovedModels(() => new Set())
     setIsDeleteFailedDialogOpen(false)
     setIsDeletingFailed(false)
-    setFailureDetails(null)
+    setTestDetails(null)
     setPagination({ pageIndex: 0, pageSize: 30 })
   }, [])
 
@@ -486,7 +489,7 @@ function ChannelTestDialogContent({
   }, [])
 
   const updateTestResult = useCallback((key: string, result: TestResult) => {
-    setFailureDetails((current) => (current?.model === key ? null : current))
+    setTestDetails((current) => (current?.model === key ? null : current))
     setTestResults((prev) => ({
       ...prev,
       [key]: result,
@@ -564,7 +567,7 @@ function ChannelTestDialogContent({
             testRequestOverrides,
             silent,
           },
-          (success, responseTime, error, errorCode) => {
+          (success, responseTime, error, errorCode, response) => {
             const completedAt = Date.now()
             finalResult = {
               status: success ? 'success' : 'error',
@@ -572,6 +575,8 @@ function ChannelTestDialogContent({
               completedAt,
               error,
               errorCode,
+              responseBody: response?.response_body,
+              responseTruncated: response?.response_truncated,
             }
             updateTestResult(model, finalResult)
           }
@@ -902,11 +907,37 @@ function ChannelTestDialogContent({
           const model = row.original.model
           const result = testResults[model]
           return (
-            <TestResultCell
-              result={result}
-              model={model}
-              onOpenDetails={setFailureDetails}
-            />
+            <div className='flex min-w-0 flex-wrap items-center gap-2'>
+              <TestResultCell
+                result={result}
+                model={model}
+                onOpenDetails={setTestDetails}
+              />
+              {result?.responseBody && (
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-7 px-2 text-xs'
+                  aria-haspopup='dialog'
+                  onClick={() => {
+                    let body = result.responseBody ?? ''
+                    try {
+                      body = JSON.stringify(JSON.parse(body), null, 2)
+                    } catch {
+                      // SSE, plain text, and truncated JSON remain readable as received.
+                    }
+                    setTestDetails({
+                      model,
+                      details: body,
+                      isResponse: true,
+                      truncated: result.responseTruncated,
+                    })
+                  }}
+                >
+                  {t('View response')}
+                </Button>
+              )}
+            </div>
           )
         },
         enableSorting: false,
@@ -1175,11 +1206,11 @@ function ChannelTestDialogContent({
         confirmText={t('Delete')}
         handleConfirm={handleDeleteFailedModels}
       />
-      <FailureDetailsSheet
-        details={failureDetails}
+      <TestDetailsSheet
+        details={testDetails}
         onOpenChange={(sheetOpen) => {
           if (!sheetOpen) {
-            setFailureDetails(null)
+            setTestDetails(null)
           }
         }}
       />
@@ -1223,7 +1254,7 @@ function TestResultCell({
 }: {
   result?: TestResult
   model: string
-  onOpenDetails: (details: FailureDetailsState) => void
+  onOpenDetails: (details: TestDetailsState) => void
 }) {
   const { t } = useTranslation()
 
@@ -1266,7 +1297,7 @@ function FailureResultContent({
 }: {
   result: TestResult
   model: string
-  onOpenDetails: (details: FailureDetailsState) => void
+  onOpenDetails: (details: TestDetailsState) => void
 }) {
   const { t } = useTranslation()
   const errorText = result.error?.trim()
@@ -1317,16 +1348,15 @@ function FailureResultContent({
   )
 }
 
-function FailureDetailsSheet({
+function TestDetailsSheet({
   details,
   onOpenChange,
 }: {
-  details: FailureDetailsState | null
+  details: TestDetailsState | null
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
-  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
 
   return (
     <Sheet open={Boolean(details)} onOpenChange={onOpenChange}>
@@ -1341,7 +1371,9 @@ function FailureDetailsSheet({
         {details && (
           <>
             <SheetHeader className={sideDrawerHeaderClassName('sm:px-5')}>
-              <SheetTitle className='pr-10'>{t('Details')}</SheetTitle>
+              <SheetTitle className='pr-10'>
+                {details.isResponse ? t('Model response') : t('Details')}
+              </SheetTitle>
               <SheetDescription className='pr-10 wrap-break-word'>
                 {details.model}
               </SheetDescription>
@@ -1353,14 +1385,21 @@ function FailureDetailsSheet({
                 </div>
                 <p className='text-sm font-medium break-all'>{details.model}</p>
               </section>
-              <section className='space-y-1'>
-                <div className='text-muted-foreground text-xs font-medium'>
-                  {t('Failed')}
-                </div>
-                <p className='text-muted-foreground text-sm leading-relaxed wrap-break-word'>
-                  {details.summary}
+              {details.summary && (
+                <section className='space-y-1'>
+                  <div className='text-muted-foreground text-xs font-medium'>
+                    {t('Failed')}
+                  </div>
+                  <p className='text-muted-foreground text-sm leading-relaxed wrap-break-word'>
+                    {details.summary}
+                  </p>
+                </section>
+              )}
+              {details.truncated && (
+                <p className='text-muted-foreground text-sm' role='status'>
+                  {t('Response truncated. Showing the first 64 KiB.')}
                 </p>
-              </section>
+              )}
               <section className='space-y-2'>
                 <div className='text-muted-foreground text-xs font-medium'>
                   {t('Details')}
@@ -1371,18 +1410,14 @@ function FailureDetailsSheet({
               </section>
             </div>
             <SheetFooter className={sideDrawerFooterClassName('sm:px-5')}>
-              <Button
+              <CopyButton
+                value={details.details}
                 variant='outline'
+                size='default'
                 className='w-full sm:w-auto'
-                onClick={() => copyToClipboard(details.details)}
               >
-                {copiedText === details.details ? (
-                  <Check className='mr-2 h-4 w-4 text-green-600' />
-                ) : (
-                  <Copy className='mr-2 h-4 w-4' />
-                )}
                 {t('Copy')}
-              </Button>
+              </CopyButton>
             </SheetFooter>
           </>
         )}
