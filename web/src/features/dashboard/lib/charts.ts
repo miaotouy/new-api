@@ -30,6 +30,7 @@ import type {
   ProcessedUserChartData,
 } from '@/features/dashboard/types'
 import { getCurrencyDisplay } from '@/lib/currency'
+import { formatNumber } from '@/lib/format'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 
 type TFunction = (key: string) => string
@@ -67,6 +68,13 @@ function renderQuotaCompat(rawQuota: number, digits = 4): string {
     return symbol + Math.pow(10, -digits).toFixed(digits)
   }
   return symbol + fixed
+}
+
+export function formatDashboardChartTotal(
+  value: number,
+  metric: ModelAnalyticsMetric
+): string {
+  return metric === 'quota' ? renderQuotaCompat(value, 2) : formatNumber(value)
 }
 
 /**

@@ -30,7 +30,9 @@ import {
   DASHBOARD_METRIC_OPTIONS,
   DEFAULT_TIME_GRANULARITY,
 } from '@/features/dashboard/constants'
+import { useChartLegendTotal } from '@/features/dashboard/hooks/use-chart-legend-total'
 import { processChartData } from '@/features/dashboard/lib'
+import { formatDashboardChartTotal } from '@/features/dashboard/lib/charts'
 import type {
   ConsumptionDistributionChartType,
   DashboardMetric,
@@ -134,6 +136,7 @@ export function ConsumptionDistributionChart(
     metric,
     chartType,
     specType,
+    timeGranularity,
     props.loading ? 'loading' : 'ready',
     props.data.length,
     props.timePoints?.length ?? 0,
@@ -141,6 +144,22 @@ export function ConsumptionDistributionChart(
     customization.preset,
     resetVersion,
   ].join('-')
+
+  const { selectedTotal, onLegendSelectedDataChange } = useChartLegendTotal(
+    spec,
+    chartKey
+  )
+  let totalDisplay =
+    metric === 'quota'
+      ? chartData.totalQuotaDisplay
+      : chartData.totalTokensDisplay
+  if (selectedTotal !== undefined) {
+    totalDisplay = formatDashboardChartTotal(selectedTotal, metric)
+  }
+  const chartSpec = useMemo(
+    () => ({ ...spec, theme: resolvedTheme, background: 'transparent' }),
+    [spec, resolvedTheme]
+  )
 
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -151,10 +170,7 @@ export function ConsumptionDistributionChart(
           </IconBadge>
           <div className='text-sm font-semibold'>{chartTitle}</div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')}{' '}
-            {metric === 'quota'
-              ? chartData.totalQuotaDisplay
-              : chartData.totalTokensDisplay}
+            {t('Total:')} {totalDisplay}
           </span>
         </div>
 
@@ -205,11 +221,8 @@ export function ConsumptionDistributionChart(
         {themeReady && spec && (
           <VChart
             key={chartKey}
-            spec={{
-              ...spec,
-              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-              background: 'transparent',
-            }}
+            spec={chartSpec}
+            onLegendSelectedDataChange={onLegendSelectedDataChange}
             option={VCHART_OPTION}
           />
         )}

@@ -30,7 +30,9 @@ import {
   MODEL_ANALYTICS_CHART_OPTIONS,
   MODEL_ANALYTICS_METRIC_OPTIONS,
 } from '@/features/dashboard/constants'
+import { useChartLegendTotal } from '@/features/dashboard/hooks/use-chart-legend-total'
 import { processChartData } from '@/features/dashboard/lib'
+import { formatDashboardChartTotal } from '@/features/dashboard/lib/charts'
 import type {
   ModelAnalyticsChartTab,
   ModelAnalyticsMetric,
@@ -136,6 +138,7 @@ export function ModelCharts(props: ModelChartsProps) {
     activeTab,
     metric,
     specType,
+    timeGranularity,
     props.loading ? 'loading' : 'ready',
     props.data.length,
     props.timePoints?.length ?? 0,
@@ -143,6 +146,18 @@ export function ModelCharts(props: ModelChartsProps) {
     customization.preset,
     resetVersion,
   ].join('-')
+
+  const { selectedTotal, onLegendSelectedDataChange } = useChartLegendTotal(
+    spec,
+    chartKey
+  )
+  if (selectedTotal !== undefined) {
+    totalDisplay = formatDashboardChartTotal(selectedTotal, metric)
+  }
+  const chartSpec = useMemo(
+    () => ({ ...spec, theme: resolvedTheme, background: 'transparent' }),
+    [spec, resolvedTheme]
+  )
 
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -202,11 +217,8 @@ export function ModelCharts(props: ModelChartsProps) {
         {themeReady && spec && (
           <VChart
             key={chartKey}
-            spec={{
-              ...spec,
-              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-              background: 'transparent',
-            }}
+            spec={chartSpec}
+            onLegendSelectedDataChange={onLegendSelectedDataChange}
             option={VCHART_OPTION}
           />
         )}

@@ -26,9 +26,11 @@ import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { useTheme } from '@/context/theme-provider'
 import { ChartResetButton } from '@/features/dashboard/components/ui/chart-reset-button'
 import { DASHBOARD_VALUE_AXIS_WIDTH } from '@/features/dashboard/constants'
+import { useChartLegendTotal } from '@/features/dashboard/hooks/use-chart-legend-total'
 import { getDashboardChartColors } from '@/features/dashboard/lib/charts'
 import { calculateCacheHitRate } from '@/features/dashboard/lib/stats'
 import type { TokenUsageDataItem } from '@/features/dashboard/types'
+import { formatNumber } from '@/lib/format'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
 import { formatChartTime, type TimeGranularity } from '@/lib/time'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -241,9 +243,18 @@ export function TokenUsageChart({
     customization.preset,
     resetVersion,
   ].join('-')
-  const numberFormat = Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 0,
-  })
+  const { selectedTotal, onLegendSelectedDataChange } = useChartLegendTotal(
+    chartData.spec,
+    chartKey
+  )
+  const chartSpec = useMemo(
+    () => ({
+      ...chartData.spec,
+      theme: resolvedTheme,
+      background: 'transparent',
+    }),
+    [chartData.spec, resolvedTheme]
+  )
 
   return (
     <div className='overflow-hidden rounded-lg border'>
@@ -254,12 +265,12 @@ export function TokenUsageChart({
           </IconBadge>
           <div className='text-sm font-semibold'>{t('Token Usage')}</div>
           <span className='text-muted-foreground text-xs'>
-            {t('Total:')} {numberFormat.format(chartData.totalTokens)}
+            {t('Total:')} {formatNumber(selectedTotal ?? chartData.totalTokens)}
           </span>
         </div>
         <div className='flex items-center gap-1.5'>
           <div className='text-muted-foreground text-xs'>
-            {t('Cached:')} {numberFormat.format(chartData.totalCachedTokens)}
+            {t('Cached:')} {formatNumber(chartData.totalCachedTokens)}
           </div>
           <ChartResetButton
             onClick={() => setResetVersion((value) => value + 1)}
@@ -270,11 +281,8 @@ export function TokenUsageChart({
         {themeReady && (
           <VChart
             key={chartKey}
-            spec={{
-              ...chartData.spec,
-              theme: resolvedTheme === 'dark' ? 'dark' : 'light',
-              background: 'transparent',
-            }}
+            spec={chartSpec}
+            onLegendSelectedDataChange={onLegendSelectedDataChange}
             option={VCHART_OPTION}
           />
         )}
