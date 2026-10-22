@@ -43,6 +43,9 @@ func (s *decisionBillingSettler) Settle(quota int) error {
 func (s *decisionBillingSettler) Refund(*gin.Context)      {}
 func (s *decisionBillingSettler) NeedsRefund() bool        { return !s.settled }
 func (s *decisionBillingSettler) GetPreConsumedQuota() int { return s.reserved }
+func (s *decisionBillingSettler) ReserveBeforeSubmit(quota int) error {
+	return s.Reserve(quota)
+}
 func (s *decisionBillingSettler) Reserve(quota int) error {
 	s.reserved = max(s.reserved, quota)
 	return nil

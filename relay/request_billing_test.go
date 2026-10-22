@@ -54,6 +54,9 @@ func (s *recordingBillingSettler) Settle(int) error         { return nil }
 func (s *recordingBillingSettler) Refund(*gin.Context)      {}
 func (s *recordingBillingSettler) NeedsRefund() bool        { return false }
 func (s *recordingBillingSettler) GetPreConsumedQuota() int { return s.preConsumed }
+func (s *recordingBillingSettler) ReserveBeforeSubmit(quota int) error {
+	return s.Reserve(quota)
+}
 func (s *recordingBillingSettler) Reserve(targetQuota int) error {
 	if targetQuota > s.preConsumed {
 		s.preConsumed = targetQuota
