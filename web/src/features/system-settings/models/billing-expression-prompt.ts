@@ -29,8 +29,9 @@ Input side:
 - p — input token count (for pricing). Automatically excludes sub-categories priced separately (e.g., if cr is used, cache tokens are deducted from p)
 - len — total input context length (for condition checks). Not affected by auto-exclusion; always reflects the full input length. Use in tier conditions
 - cr — cache-hit (read) token count
-- cc — cache-create token count (5-min TTL)
+- cc — cache-create token count (Claude 5-min TTL, OpenAI 30-min TTL)
 - cc1h — cache-create token count (1-hour TTL, Claude-specific)
+- cc12h — cache-create token count (12-hour TTL, OpenAI-specific)
 - img — image input token count
 - ai — audio input token count
 
