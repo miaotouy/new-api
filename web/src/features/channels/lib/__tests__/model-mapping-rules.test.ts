@@ -58,6 +58,52 @@ describe('deriveModelMappingPairs', () => {
     })
   })
 
+  test('wildcard prefixes strip through the first delimiter and preserve exact mapping conflicts', () => {
+    expect(
+      deriveModelMappingPairs(
+        [
+          'deepseek/deepseek-v4',
+          'google/gemini',
+          'azure/deepseek-v4',
+          'org/team/model',
+          'plain',
+          'vendor/',
+        ],
+        'upstream',
+        { type: 'strip-prefix', values: '*/' }
+      )
+    ).toEqual({
+      pairs: [
+        { from: 'deepseek-v4', to: 'deepseek/deepseek-v4' },
+        { from: 'gemini', to: 'google/gemini' },
+        { from: 'team/model', to: 'org/team/model' },
+      ],
+      unchanged: ['plain', 'vendor/'],
+      conflicts: ['azure/deepseek-v4'],
+    })
+  })
+
+  test.each([
+    ['strip-prefix', 'vendor.*/', 'vendor.v1/model', 'model'],
+    ['strip-prefix', 'vendor.*/', 'vendorXv1/model', 'vendorXv1/model'],
+    ['strip-prefix', 'missing/, */', 'vendor/model', 'model'],
+    ['strip-prefix', '*', 'vendor/model', 'vendor/model'],
+    ['strip-suffix', '/*', 'org/model/version', 'org/model'],
+    ['strip-suffix', '-*', 'model-latest', 'model'],
+  ] as const)(
+    '%s with %s transforms %s into %s',
+    (type, values, model, expected) => {
+      const result = deriveModelMappingPairs([model], 'request', {
+        type,
+        values,
+      })
+      expect(result.pairs).toEqual(
+        expected === model ? [] : [{ from: model, to: expected }]
+      )
+      expect(result.unchanged).toEqual(expected === model ? [model] : [])
+    }
+  )
+
   test('request names derive upstream names by adding an affix or replacing text', () => {
     expect(
       deriveModelMappingPairs(['gemini-2.5-flash'], 'request', {

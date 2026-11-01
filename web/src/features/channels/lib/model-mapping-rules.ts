@@ -30,7 +30,8 @@ export type ModelMappingDirection = 'upstream' | 'request'
 /**
  * A naming rule applied to the selected names to derive the other side of the
  * mapping. `strip-*` rules accept several comma-separated affixes and remove
- * the first one that matches. The backend matches mapping keys exactly, so
+ * the first one that matches. A star matches the shortest text up to the next
+ * literal segment. The backend matches mapping keys exactly, so
  * rules are expanded on the client into explicit pairs before saving.
  */
 export type ModelMappingRule =
@@ -46,6 +47,25 @@ export type ModelMappingDerivation = {
   unchanged: string[]
   /** Selected models whose request name is already taken by an earlier pair. */
   conflicts: string[]
+}
+
+/** Match from either edge, treating only stars as wildcard syntax. */
+function matchModelAffix(
+  model: string,
+  pattern: string,
+  suffix: boolean
+): number | null {
+  const name = suffix ? [...model].reverse().join('') : model
+  const value = suffix ? [...pattern].reverse().join('') : pattern
+  const [first, ...parts] = value.split('*')
+  if (!name.startsWith(first)) return null
+  let end = first.length
+  for (const part of parts) {
+    const index = name.indexOf(part, end)
+    if (index < 0) return null
+    end = index + part.length
+  }
+  return end
 }
 
 export function deriveModelMappingPairs(
@@ -72,12 +92,16 @@ export function deriveModelMappingPairs(
     if (!model || seen.has(model)) continue
     seen.add(model)
     let derived = model
-    if (rule.type === 'strip-prefix') {
-      const prefix = affixes.find((affix) => model.startsWith(affix))
-      if (prefix) derived = model.slice(prefix.length)
-    } else if (rule.type === 'strip-suffix') {
-      const suffix = affixes.find((affix) => model.endsWith(affix))
-      if (suffix) derived = model.slice(0, -suffix.length)
+    if (rule.type === 'strip-prefix' || rule.type === 'strip-suffix') {
+      const suffix = rule.type === 'strip-suffix'
+      for (const affix of affixes) {
+        const length = matchModelAffix(model, affix, suffix)
+        if (length === null) continue
+        derived = suffix
+          ? model.slice(0, model.length - length)
+          : model.slice(length)
+        break
+      }
     } else if (rule.type === 'add-prefix') {
       derived = `${rule.value}${model}`
     } else if (rule.type === 'add-suffix') {

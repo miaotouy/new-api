@@ -91,6 +91,19 @@ export function ModelMappingBatchDialog(props: ModelMappingBatchDialogProps) {
   const [syncModels, setSyncModels] = useState(true)
   const candidates =
     source === 'upstream' ? upstreamModels : props.channelModels
+  const detectedPrefixes = useMemo(
+    () => [
+      ...new Set(
+        selected.flatMap((model) => {
+          const slash = model.indexOf('/')
+          return slash > 0 && slash < model.length - 1
+            ? [model.slice(0, slash + 1)]
+            : []
+        })
+      ),
+    ],
+    [selected]
+  )
   const rule = useMemo<ModelMappingRule>(() => {
     if (ruleType === 'strip-prefix' || ruleType === 'strip-suffix') {
       return { type: ruleType, values: affix }
@@ -302,6 +315,31 @@ export function ModelMappingBatchDialog(props: ModelMappingBatchDialogProps) {
                   ))}
                 </SelectContent>
               </Select>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  disabled={detectedPrefixes.length === 0}
+                  onClick={() => {
+                    setRuleType('strip-prefix')
+                    setAffix(detectedPrefixes.join(', '))
+                  }}
+                >
+                  {t('Auto-detect prefixes')}
+                </Button>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  onClick={() => {
+                    setRuleType('strip-prefix')
+                    setAffix('*/')
+                  }}
+                >
+                  {t('Strip vendor prefixes (*/)')}
+                </Button>
+              </div>
             </Field>
             {ruleType === 'replace' ? (
               <div className='grid gap-3 sm:grid-cols-2'>
@@ -339,7 +377,13 @@ export function ModelMappingBatchDialog(props: ModelMappingBatchDialogProps) {
                 />
                 {isStrip && (
                   <FieldDescription>
-                    {t('Separate several values with commas')}
+                    {ruleType === 'strip-prefix'
+                      ? t(
+                          'Separate values with commas. Use */ to strip through the first slash.'
+                        )
+                      : t(
+                          'Separate values with commas. Use * to match any text.'
+                        )}
                   </FieldDescription>
                 )}
               </Field>

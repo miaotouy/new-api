@@ -267,3 +267,74 @@ test('long translated source labels wrap inside their row without covering the m
     screen.getByRole('textbox', { name: 'Rechercher des modèles...' })
   ).toBeVisible()
 })
+
+const models = [
+  'deepseek/model-a',
+  'google/model-b',
+  'plain',
+  'unselected/model-c',
+]
+
+test('auto-detection fills prefixes from selected models and applies the previewed aliases', async () => {
+  const user = userEvent.setup()
+  const onApply = vi.fn()
+  render(
+    <ModelMappingBatchDialog
+      open
+      onOpenChange={vi.fn()}
+      upstreamModels={models}
+      channelModels={[]}
+      onApply={onApply}
+    />
+  )
+  const detect = screen.getByRole('button', { name: 'Auto-detect prefixes' })
+  expect(detect).toBeDisabled()
+  await user.click(screen.getByRole('checkbox', { name: 'plain' }))
+  expect(detect).toBeDisabled()
+  await user.click(screen.getByRole('checkbox', { name: 'deepseek/model-a' }))
+  await user.click(screen.getByRole('checkbox', { name: 'google/model-b' }))
+  await user.click(detect)
+  expect(screen.getByRole('textbox', { name: 'Prefix' })).toHaveValue(
+    'deepseek/, google/'
+  )
+  const preview = within(screen.getByRole('list', { name: 'Preview' }))
+  expect(preview.getByText('model-a', { exact: true })).toBeVisible()
+  expect(preview.getByText('model-b', { exact: true })).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Add 2 mapping(s)' }))
+  expect(onApply).toHaveBeenCalledWith({
+    pairs: [
+      { from: 'model-a', to: 'deepseek/model-a' },
+      { from: 'model-b', to: 'google/model-b' },
+    ],
+    syncModels: true,
+  })
+})
+
+test('the vendor-prefix shortcut previews wildcard mappings and supports editing the pattern', async () => {
+  const user = userEvent.setup()
+  const onApply = vi.fn()
+  render(
+    <ModelMappingBatchDialog
+      open
+      onOpenChange={vi.fn()}
+      upstreamModels={models}
+      channelModels={[]}
+      onApply={onApply}
+    />
+  )
+  await user.click(screen.getByRole('checkbox', { name: 'deepseek/model-a' }))
+  await user.click(screen.getByRole('checkbox', { name: 'google/model-b' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Strip vendor prefixes (*/)' })
+  )
+  const prefix = screen.getByRole('textbox', { name: 'Prefix' })
+  expect(prefix).toHaveValue('*/')
+  expect(screen.getByRole('button', { name: 'Add 2 mapping(s)' })).toBeEnabled()
+  await user.clear(prefix)
+  await user.type(prefix, 'deep*/')
+  await user.click(screen.getByRole('button', { name: 'Add 1 mapping(s)' }))
+  expect(onApply).toHaveBeenCalledWith({
+    pairs: [{ from: 'model-a', to: 'deepseek/model-a' }],
+    syncModels: true,
+  })
+})
