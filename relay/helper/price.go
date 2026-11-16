@@ -348,14 +348,14 @@ func resolveBillingModelName(origin string) string {
 func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billingModelName string, promptTokens int, groupRatioInfo hosttypes.GroupRatioInfo) (hosttypes.PriceData, error) {
 	exprStr, ok := billing_setting.GetBillingExpr(billingModelName)
 	if info.RelayFormat == types.RelayFormatDecisions && c.GetString("task_plugin_key") == "typesafe" {
-		exprStr, ok = billing_setting.ResolveTaskBillingExpr("typesafe", billingModelName, "")
+		exprStr, _, ok = billing_setting.ResolveTaskBillingExpr("typesafe", billingModelName, "")
 	}
 	if !ok {
 		return hosttypes.PriceData{}, fmt.Errorf("model %s is configured as tiered_expr but has no billing expression", billingModelName)
 	}
 	exprHash := billingexpr.ExprHashString(exprStr)
 	usedVars := billingexpr.UsedVarsByHash(exprStr, exprHash)
-	if usedVars["u"] {
+	if usedVars["u"] && info.RelayFormat != types.RelayFormatDecisions {
 		return hosttypes.PriceData{}, errors.New(i18n.T(c, i18n.MsgRelayTaskUsagePriceUnsupported, map[string]any{"Model": billingModelName}))
 	}
 	fixedPricing := billingexpr.UsesFixedPricingByHash(exprStr, exprHash)
@@ -389,7 +389,7 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		return hosttypes.PriceData{}, err
 	}
 
-	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info)
+	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info, usedVars["param"])
 	if err != nil {
 		return hosttypes.PriceData{}, err
 	}

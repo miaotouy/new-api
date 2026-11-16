@@ -128,6 +128,7 @@ type ModelPricingSheetProps = {
   usageSchema?: BillingUsageSchema
   pluginVariants?: ModelPricingPluginVariant[]
   onDirtyChange?: (dirty: boolean) => void
+  scrollHeader?: ReactNode
 }
 
 type ModelPricingEditorPanelProps = Omit<
@@ -136,7 +137,6 @@ type ModelPricingEditorPanelProps = Omit<
 > & {
   className?: string
   embedded?: boolean
-  scrollHeader?: ReactNode
 }
 
 export type ModelPricingEditorPanelHandle = {
@@ -187,6 +187,7 @@ export const ModelPricingSheet = forwardRef<
     usageSchema,
     pluginVariants,
     onDirtyChange,
+    scrollHeader,
   },
   ref
 ) {
@@ -212,6 +213,7 @@ export const ModelPricingSheet = forwardRef<
           usageSchema={usageSchema}
           pluginVariants={pluginVariants}
           onDirtyChange={onDirtyChange}
+          scrollHeader={scrollHeader}
           onSave={onSave}
           isSaving={isSaving}
           className='h-full rounded-none border-0'
@@ -981,6 +983,7 @@ export const ModelPricingEditorPanel = forwardRef<
                   modelBillingMode={
                     pricingMode === 'tiered_expr' ? 'tiered_expr' : 'ratio'
                   }
+                  perCallPrice={pricingMode === 'per-request'}
                   currency={currency}
                   ordinaryPricing={!usesTaskPricing}
                   onConfigureOrdinaryPricing={configureOrdinaryPricing}
@@ -1213,7 +1216,7 @@ export const ModelPricingEditorPanel = forwardRef<
                 <div className='border-b px-3 py-2'>
                   <div className='text-sm font-medium'>
                     {!usesTaskPricing && pluginVariants?.length ? (
-                      <>{t('Ordinary OpenAI')} · </>
+                      <>{t('Default price')} · </>
                     ) : null}
                     {t('Preview')}
                   </div>

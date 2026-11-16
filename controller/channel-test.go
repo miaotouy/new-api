@@ -23,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -97,6 +98,34 @@ func relayFormatForChannelTestEndpoint(endpoint constant.EndpointType) types.Rel
 	}
 }
 
+// providerTestEndpoints are the endpoints a task plugin channel test tries when
+// its plugin's relay routes do not serve the default one, in this order.
+var providerTestEndpoints = []constant.EndpointType{
+	constant.EndpointTypeOpenAI,
+	constant.EndpointTypeOpenAIResponse,
+	constant.EndpointTypeAnthropic,
+	constant.EndpointTypeGemini,
+	constant.EndpointTypeEmbeddings,
+	constant.EndpointTypeJinaRerank,
+	constant.EndpointTypeImageGeneration,
+}
+
+// providerTestEndpoint returns the endpoint a task plugin channel test uses
+// for model instead of requestPath, which meta's relay routes do not serve.
+// ok is false when they serve requestPath or none of the test endpoints.
+func providerTestEndpoint(meta jsplugin.Meta, requestPath, model string) (endpoint constant.EndpointType, ok bool) {
+	if _, served := meta.RelayRoute(requestPath, model); served {
+		return "", false
+	}
+	for _, endpoint := range providerTestEndpoints {
+		info, _ := common.GetDefaultEndpointInfo(endpoint)
+		if _, served := meta.RelayRoute(strings.ReplaceAll(info.Path, "{model}", model), model); served {
+			return endpoint, true
+		}
+	}
+	return "", false
+}
+
 func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	if c != nil {
 		if userID := c.GetInt("id"); userID > 0 {
@@ -134,7 +163,11 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		constant.ChannelTypeDoubaoVideo,
 		constant.ChannelTypeVidu,
 	}
-	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
+	// A task plugin channel whose plugin has relay routes tests like an
+	// Advanced Custom channel.
+	plugin, bound := service.PluginOfChannel(channel)
+	providerChannel := bound && plugin.Meta.HasProviderPart()
+	if lo.Contains(unsupportedTestChannelTypes, channel.Type) && !providerChannel {
 		channelTypeName := constant.GetChannelTypeName(channel.Type)
 		return testResult{
 			localErr: fmt.Errorf("%s channel test is not supported", channelTypeName),
@@ -163,10 +196,20 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	if err != nil {
 		return testResult{localErr: err}
 	}
+	endpointInfo, _ := common.GetDefaultEndpointInfo(resolvedEndpoint)
+	requestPath := strings.ReplaceAll(endpointInfo.Path, "{model}", testModel)
+	if providerChannel && (strings.TrimSpace(endpointType) == "" || strings.TrimSpace(endpointType) == "auto") {
+		if endpoint, ok := providerTestEndpoint(plugin.Meta, requestPath, testModel); ok {
+			resolvedEndpoint = endpoint
+			endpointInfo, _ = common.GetDefaultEndpointInfo(endpoint)
+			requestPath = strings.ReplaceAll(endpointInfo.Path, "{model}", testModel)
+		}
+	}
 	endpointType = string(resolvedEndpoint)
 	resolvedEndpointName = endpointType
-	endpointInfo, _ := common.GetDefaultEndpointInfo(resolvedEndpoint)
-	requestPath := endpointInfo.Path
+	if isStream && resolvedEndpoint == constant.EndpointTypeGemini {
+		requestPath = strings.Replace(requestPath, ":generateContent", ":streamGenerateContent", 1)
+	}
 
 	c.Request = httptest.NewRequestWithContext(ctx, http.MethodPost, requestPath, nil)
 
@@ -249,7 +292,8 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	// 更新请求中的模型名称
 	request.SetModelName(testModel)
 
-	apiType, _ := common.ChannelType2APIType(channel.Type)
+	// InitChannelMeta resolved the API type, the provider plugin one included.
+	apiType := info.ApiType
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
 		!common.SupportsResponsesCompact(channel.Type, apiType) {
 		return testResult{

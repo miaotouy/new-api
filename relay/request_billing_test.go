@@ -10,6 +10,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
@@ -18,8 +19,7 @@ import (
 )
 
 // Key-routing retries re-price the request after switching group. The retry path
-// must reuse the exact metadata of the initial estimate, otherwise the output
-// token budget (max_tokens) is lost and the second reservation undercharges.
+// must retain the request metadata captured by the initial estimate.
 func TestPrepareRequestBillingRetainsPricingMetaForRetry(t *testing.T) {
 	previousRatios := ratio_setting.ModelRatio2JSONString()
 	previousCountToken := constant.CountToken
@@ -64,35 +64,50 @@ func (s *recordingBillingSettler) Reserve(targetQuota int) error {
 	return nil
 }
 
-// RefreshRouteBilling re-prices an existing reservation for the selected route
-// group. It must include the retained output-token budget, otherwise retry
-// switching to a more expensive group reserves too little.
-func TestRefreshRouteBillingReservesWithRetainedMaxTokens(t *testing.T) {
+// RefreshRouteBilling reserves estimated input cost for the selected group.
+// A cheaper retry retains the reservation until settlement.
+func TestRefreshRouteBillingReservesSelectedGroupInputCost(t *testing.T) {
 	previousRatios := ratio_setting.ModelRatio2JSONString()
 	previousGroupRatios := ratio_setting.GroupRatio2JSONString()
+	previousMultiplier := operation_setting.GetQuotaSetting().PreConsumeMultiplier
+	operation_setting.GetQuotaSetting().PreConsumeMultiplier = 1
 	t.Cleanup(func() {
+		operation_setting.GetQuotaSetting().PreConsumeMultiplier = previousMultiplier
 		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(previousRatios))
 		require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(previousGroupRatios))
 	})
 	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"retry-priced-model":1}`))
-	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1}`))
+	require.NoError(t, ratio_setting.UpdateGroupRatioByJSONString(`{"default":1,"premium":3}`))
 
-	reserveFor := func(maxTokens int) int {
-		c, _ := gin.CreateTestContext(httptest.NewRecorder())
-		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
-		common.SetContextKey(c, constant.ContextKeyTokenRoutingConfigured, true)
-		common.SetContextKey(c, constant.ContextKeyTokenFailoverEnabled, true)
-		settler := &recordingBillingSettler{}
-		info := &relaycommon.RelayInfo{
-			OriginModelName:    "retry-priced-model",
-			UsingGroup:         "default",
-			Billing:            settler,
-			BillingRequestMeta: &types.TokenCountMeta{MaxTokens: maxTokens},
-		}
-		info.SetEstimatePromptTokens(7)
-		require.Nil(t, RefreshRouteBilling(c, info))
-		return settler.preConsumed
+	for _, tc := range []struct {
+		name      string
+		group     string
+		maxTokens int
+		reserved  int
+		want      int
+	}{
+		{"estimated input", "default", 0, 0, 7},
+		{"large output limit", "default", 10000, 0, 7},
+		{"more expensive group", "premium", 10000, 7, 21},
+		{"cheaper group", "default", 10000, 21, 21},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			common.SetContextKey(c, constant.ContextKeyTokenRoutingConfigured, true)
+			common.SetContextKey(c, constant.ContextKeyTokenFailoverEnabled, true)
+			settler := &recordingBillingSettler{preConsumed: tc.reserved}
+			info := &relaycommon.RelayInfo{
+				OriginModelName:    "retry-priced-model",
+				UsingGroup:         tc.group,
+				Billing:            settler,
+				BillingRequestMeta: &types.TokenCountMeta{MaxTokens: tc.maxTokens},
+			}
+			info.SetEstimatePromptTokens(7)
+			require.Nil(t, RefreshRouteBilling(c, info))
+			assert.Equal(t, tc.want, settler.preConsumed)
+			require.Nil(t, RefreshRouteBilling(c, info))
+			assert.Equal(t, tc.want, settler.preConsumed, "re-pricing the same route retains its reservation")
+		})
 	}
-
-	assert.Greater(t, reserveFor(10000), reserveFor(0), "the retained max_tokens budget must affect the reservation")
 }
