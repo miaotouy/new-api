@@ -92,6 +92,7 @@ const schema = z.object({
       .max(1, { message: 'Must be 1 or less' }),
     function_call_thought_signature_enabled: z.boolean(),
     remove_function_response_id_enabled: z.boolean(),
+    markdown_image_conversion_enabled: z.boolean(),
   }),
 })
 
@@ -106,6 +107,7 @@ type FlatGeminiSettings = {
   'gemini.thinking_adapter_budget_tokens_percentage': number
   'gemini.function_call_thought_signature_enabled': boolean
   'gemini.remove_function_response_id_enabled': boolean
+  'gemini.markdown_image_conversion_enabled': boolean
 }
 
 type GeminiSettingsCardProps = {
@@ -134,6 +136,8 @@ export function GeminiSettingsCard({ defaultValues }: GeminiSettingsCardProps) {
       defaultValues.gemini.function_call_thought_signature_enabled ?? true,
     'gemini.remove_function_response_id_enabled':
       defaultValues.gemini.remove_function_response_id_enabled ?? true,
+    'gemini.markdown_image_conversion_enabled':
+      defaultValues.gemini.markdown_image_conversion_enabled ?? false,
   })
 
   const buildFormDefaults = (
@@ -152,6 +156,8 @@ export function GeminiSettingsCard({ defaultValues }: GeminiSettingsCardProps) {
         values.gemini.function_call_thought_signature_enabled ?? true,
       remove_function_response_id_enabled:
         values.gemini.remove_function_response_id_enabled ?? true,
+      markdown_image_conversion_enabled:
+        values.gemini.markdown_image_conversion_enabled ?? false,
     },
   })
 
@@ -184,6 +190,8 @@ export function GeminiSettingsCard({ defaultValues }: GeminiSettingsCardProps) {
         defaultValues.gemini.function_call_thought_signature_enabled ?? true,
       'gemini.remove_function_response_id_enabled':
         defaultValues.gemini.remove_function_response_id_enabled ?? true,
+      'gemini.markdown_image_conversion_enabled':
+        defaultValues.gemini.markdown_image_conversion_enabled ?? false,
     }
 
     form.reset(buildFormDefaults(defaultValues))
@@ -209,6 +217,8 @@ export function GeminiSettingsCard({ defaultValues }: GeminiSettingsCardProps) {
         values.gemini.function_call_thought_signature_enabled,
       'gemini.remove_function_response_id_enabled':
         values.gemini.remove_function_response_id_enabled,
+      'gemini.markdown_image_conversion_enabled':
+        values.gemini.markdown_image_conversion_enabled,
     }
 
     const updates = (
@@ -384,6 +394,29 @@ export function GeminiSettingsCard({ defaultValues }: GeminiSettingsCardProps) {
               </p>
             )}
           </SettingsControlGroup>
+
+          <FormField
+            control={form.control}
+            name='gemini.markdown_image_conversion_enabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Convert Markdown Images')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Legacy compatibility: convert Markdown base64 images in OpenAI chat text to Gemini/Vertex image inputs. Disabled by default.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
 
           <FormField
             control={form.control}

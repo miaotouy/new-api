@@ -37,6 +37,7 @@ const defaultModelSettings: ModelSettings = {
   'gemini.thinking_adapter_budget_tokens_percentage': 0.6,
   'gemini.function_call_thought_signature_enabled': true,
   'gemini.remove_function_response_id_enabled': true,
+  'gemini.markdown_image_conversion_enabled': false,
   'claude.model_headers_settings': '',
   'claude.default_max_tokens': '',
   'claude.thinking_adapter_enabled': true,

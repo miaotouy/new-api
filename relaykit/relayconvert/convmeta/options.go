@@ -80,6 +80,9 @@ type GeminiOptions struct {
 	// FunctionCallThoughtSignatureEnabled attaches thoughtSignature bypass
 	// values to function-call parts.
 	FunctionCallThoughtSignatureEnabled bool
+	// MarkdownImageConversionEnabled converts inline Markdown base64 images
+	// in OpenAI chat text to Gemini image parts. Disabled by default.
+	MarkdownImageConversionEnabled bool
 	// SupportsImagine reports whether the model supports image generation
 	// (switches response modalities). Nil means "never".
 	SupportsImagine func(modelName string) bool

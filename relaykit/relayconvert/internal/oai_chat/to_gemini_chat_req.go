@@ -4,9 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"context"
+
+	"github.com/MoeForge/moego/base64"
 
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
@@ -15,6 +18,8 @@ import (
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 )
+
+var markdownBase64ImagePattern = regexp.MustCompile(`!\[[^\]\r\n]*\]\(data:(image/[A-Za-z0-9.+-]+);base64,([A-Za-z0-9+/=\r\n]+)\)`)
 
 func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto.GeneralOpenAIRequest, info convmeta.Meta) (*dto.GeminiChatRequest, error) {
 	opts := convmeta.OptionsOf(info)
@@ -274,55 +279,35 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 				if part.Text == "" {
 					continue
 				}
+				if !opts.Gemini.MarkdownImageConversionEnabled {
+					parts = append(parts, dto.GeminiPart{Text: part.Text})
+					continue
+				}
+
 				text := part.Text
-				hasMarkdownImage := false
-				for {
-					startIdx := strings.Index(text, "![")
-					if startIdx == -1 {
-						break
+				cursor := 0
+				for _, match := range markdownBase64ImagePattern.FindAllStringSubmatchIndex(text, -1) {
+					imageData := text[match[4]:match[5]]
+					if decoded, err := base64.StdEncoding.DecodeString(imageData); err != nil || len(decoded) == 0 {
+						continue
 					}
-					bracketIdx := strings.Index(text[startIdx:], "](data:")
-					if bracketIdx == -1 {
-						break
-					}
-					bracketIdx += startIdx
-					closeIdx := strings.Index(text[bracketIdx+2:], ")")
-					if closeIdx == -1 {
-						break
-					}
-					closeIdx += bracketIdx + 2
-
-					hasMarkdownImage = true
-					if startIdx > 0 {
-						textBefore := text[:startIdx]
-						if textBefore != "" {
-							parts = append(parts, dto.GeminiPart{
-								Text: textBefore,
-							})
-						}
-					}
-
-					dataURL := text[bracketIdx+2 : closeIdx]
-					format, base64String, err := relaymedia.DecodeBase64FileData(dataURL)
-					if err != nil {
-						return nil, fmt.Errorf("decode markdown base64 image data failed: %s", err.Error())
+					if match[0] > cursor {
+						parts = append(parts, dto.GeminiPart{Text: text[cursor:match[0]]})
 					}
 					imgPart := dto.GeminiPart{
 						InlineData: &dto.GeminiInlineData{
-							MimeType: format,
-							Data:     base64String,
+							MimeType: text[match[2]:match[3]],
+							Data:     imageData,
 						},
 					}
 					if shouldAttachThoughtSignature {
 						sharedgemini.AttachThoughtSignatureBypass(opts, &imgPart)
 					}
 					parts = append(parts, imgPart)
-					text = text[closeIdx+1:]
+					cursor = match[1]
 				}
-				if !hasMarkdownImage {
-					parts = append(parts, dto.GeminiPart{
-						Text: part.Text,
-					})
+				if cursor < len(text) {
+					parts = append(parts, dto.GeminiPart{Text: text[cursor:]})
 				}
 			} else {
 				source := part.ToFileSource()
