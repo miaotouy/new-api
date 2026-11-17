@@ -95,8 +95,29 @@ func TestMigrateDBCreatesTokenRouteRulesSQLite(t *testing.T) {
 	// Verify fresh startup, then simulate an older schema without route rules.
 	require.NoError(t, migrateDB())
 	require.True(t, db.Migrator().HasTable(&TokenRouteRule{}))
+	require.True(t, db.Migrator().HasTable(&TokenUsageData{}))
+	tokenUsage := TokenUsageData{
+		UserID:       1,
+		Username:     "migration-user",
+		ModelName:    "migration-model",
+		CreatedAt:    1_700_000_000,
+		InputTokens:  10,
+		OutputTokens: 5,
+	}
+	require.NoError(t, db.Create(&tokenUsage).Error)
 	token := Token{UserId: 1, Key: "preserved-token-key"}
 	require.NoError(t, db.Create(&token).Error)
+	require.NoError(t, migrateDB())
+	assert.True(t, db.Migrator().HasIndex(&TokenUsageData{}, "idx_token_usage_bucket"))
+	var preservedUsage TokenUsageData
+	require.NoError(t, db.First(&preservedUsage, tokenUsage.ID).Error)
+	assert.Equal(t, tokenUsage.InputTokens, preservedUsage.InputTokens)
+	assert.Equal(t, tokenUsage.OutputTokens, preservedUsage.OutputTokens)
+	require.NoError(t, db.Migrator().DropTable(&TokenUsageData{}))
+	require.False(t, db.Migrator().HasTable(&TokenUsageData{}))
+	require.NoError(t, migrateDB())
+	require.True(t, db.Migrator().HasTable(&TokenUsageData{}))
+	assert.True(t, db.Migrator().HasIndex(&TokenUsageData{}, "idx_token_usage_bucket"))
 	require.NoError(t, db.Migrator().DropTable(&TokenRouteRule{}))
 	require.False(t, db.Migrator().HasTable(&TokenRouteRule{}))
 
