@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,6 +66,63 @@ func TestMigrateTokenKeyUniquenessSQLite(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	testTokenKeyMigrationNonPostgreSQL(t, db)
+}
+
+func TestMigrateDBCreatesTokenRouteRulesSQLite(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	var sqliteVersion string
+	require.NoError(t, db.Raw("SELECT sqlite_version()").Scan(&sqliteVersion).Error)
+	t.Logf("SQLite version: %s", sqliteVersion)
+
+	previousDB := DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	previousRetireAt := legacyAccessTokenRetireAt.Load()
+	DB = db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	initCol()
+	t.Cleanup(func() {
+		DB = previousDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+		legacyAccessTokenRetireAt.Store(previousRetireAt)
+		initCol()
+		assert.NoError(t, sqlDB.Close())
+	})
+
+	// Verify fresh startup, then simulate an older schema without route rules.
+	require.NoError(t, migrateDB())
+	require.True(t, db.Migrator().HasTable(&TokenRouteRule{}))
+	token := Token{UserId: 1, Key: "preserved-token-key"}
+	require.NoError(t, db.Create(&token).Error)
+	require.NoError(t, db.Migrator().DropTable(&TokenRouteRule{}))
+	require.False(t, db.Migrator().HasTable(&TokenRouteRule{}))
+
+	require.NoError(t, migrateDB())
+	require.True(t, db.Migrator().HasTable(&TokenRouteRule{}))
+	assert.True(t, db.Migrator().HasIndex(&TokenRouteRule{}, "idx_token_route_position"))
+	var preservedToken Token
+	require.NoError(t, db.First(&preservedToken, token.Id).Error)
+	assert.Equal(t, token.Key, preservedToken.Key)
+
+	rule := TokenRouteRule{
+		TokenID:   token.Id,
+		Position:  0,
+		Kind:      TokenRouteKindGroup,
+		GroupName: "default",
+		Enabled:   true,
+	}
+	require.NoError(t, db.Create(&rule).Error)
+	duplicateRule := rule
+	duplicateRule.ID = 0
+	require.Error(t, db.Create(&duplicateRule).Error)
+	require.NoError(t, migrateDB())
+
+	var preservedRule TokenRouteRule
+	require.NoError(t, db.Where("token_id = ?", token.Id).First(&preservedRule).Error)
+	assert.Equal(t, rule.GroupName, preservedRule.GroupName)
 }
 
 func TestMigrateTokenKeyUniquenessMySQL(t *testing.T) {
