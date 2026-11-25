@@ -68,7 +68,9 @@ export type VerificationOperation =
     }
   | {
       scope: 'admin.user.manage'
-      context: { user_id: number; action: AdminUserManageAction }
+      context:
+        | { user_id: number; action: AdminUserManageAction }
+        | { user_ids: number[]; action: 'batch_disable' }
     }
   | {
       scope: 'admin.user.binding.clear'

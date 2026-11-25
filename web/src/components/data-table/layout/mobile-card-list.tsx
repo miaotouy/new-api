@@ -187,6 +187,7 @@ export function MobileCardList<TData>(props: MobileCardListProps<TData>) {
               {enableRowSelection && (
                 <Checkbox
                   className='mt-0.5'
+                  disabled={!row.getCanSelect()}
                   checked={row.getIsSelected()}
                   onCheckedChange={(value) =>
                     row.toggleSelected(Boolean(value))

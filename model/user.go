@@ -787,6 +787,35 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	}
 }
 
+// DisableActiveCommonUsers checks the entire selection under lock before changing
+// any account. Advance the same auth-version fences as a single-user disable.
+func DisableActiveCommonUsers(ids []int) ([]User, error) {
+	var users []User
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		active := tx.Model(&User{}).Where("id IN ? AND role = ? AND status = ?", ids, common.RoleCommonUser, common.UserStatusEnabled)
+		if err := lockForUpdate(active.Session(&gorm.Session{})).Select("id", "username").Order("id").Find(&users).Error; err != nil {
+			return err
+		}
+		if len(users) == 0 || len(users) != len(ids) {
+			return gorm.ErrRecordNotFound
+		}
+		for _, user := range users {
+			if _, err := IncrementUserAuthVersionWithTx(tx, user.Id); err != nil {
+				return err
+			}
+		}
+		updated := active.Update("status", common.UserStatusDisabled)
+		if updated.Error != nil {
+			return updated.Error
+		}
+		if updated.RowsAffected != int64(len(users)) {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	return users, err
+}
+
 func (user *User) Update(updatePassword bool) error {
 	var previousAuthVersion int64
 	if err := DB.Model(&User{}).Where("id = ?", user.Id).Select("auth_version").Find(&previousAuthVersion).Error; err != nil {

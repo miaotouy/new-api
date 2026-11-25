@@ -38,6 +38,7 @@ import {
 import { getGroups, getUsers, searchUsers } from '../api'
 import {
   USER_STATUS,
+  USER_ROLE,
   getUserStatusOptions,
   getUserRoleOptions,
   isUserDeleted,
@@ -130,7 +131,7 @@ export function UsersTable() {
   }
 
   // Fetch data with React Query
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isPlaceholderData } = useQuery({
     queryKey: [
       'users',
       pagination.pageIndex + 1,
@@ -185,7 +186,12 @@ export function UsersTable() {
   const { table } = useDataTable({
     data: users,
     columns,
-    enableRowSelection: true,
+    getRowId: (user) => String(user.id),
+    enableRowSelection: ({ original: user }) =>
+      !isPlaceholderData &&
+      user.role === USER_ROLE.USER &&
+      user.status === USER_STATUS.ENABLED &&
+      !isUserDeleted(user),
     columnFilters,
     globalFilter,
     pagination,
@@ -258,6 +264,8 @@ export function UsersTable() {
 
         return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
       }}
+      mobileProps={{ enableRowSelection: true }}
+      showMobileBulkActions
       bulkActions={<DataTableBulkActions table={table} />}
     />
   )

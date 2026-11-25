@@ -52,8 +52,32 @@ afterEach(() => {
   useAuthStore.getState().auth.reset()
 })
 
-async function renderUsers(initialEntry = '/users/') {
+const premiumUser = {
+  id: 2,
+  username: 'premium-user',
+  display_name: '',
+  role: 1,
+  status: 1,
+  quota: 0,
+  used_quota: 0,
+  request_count: 0,
+  group: 'premium',
+}
+
+async function renderUsers(initialEntry = '/users/', items = [premiumUser]) {
   const get = vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    if (url === '/api/verify/methods') {
+      return {
+        data: {
+          success: true,
+          data: {
+            scope: 'admin.user.manage',
+            methods: [{ method: '2fa', available: true }],
+            oauth_providers: [],
+          },
+        },
+      }
+    }
     if (url === '/api/group/') {
       return { data: { success: true, data: ['default', 'premium'] } }
     }
@@ -61,20 +85,8 @@ async function renderUsers(initialEntry = '/users/') {
       data: {
         success: true,
         data: {
-          items: [
-            {
-              id: 2,
-              username: 'premium-user',
-              display_name: '',
-              role: 1,
-              status: 1,
-              quota: 0,
-              used_quota: 0,
-              request_count: 0,
-              group: 'premium',
-            },
-          ],
-          total: 1,
+          items,
+          total: items.length,
         },
       },
     }
@@ -151,4 +163,63 @@ it('restores the user group filter from the page URL on load', async () => {
   expect(get).toHaveBeenCalledWith(premiumSearchUrl)
   expect(get).not.toHaveBeenCalledWith('/api/user/', expect.anything())
   expect(getGroupFilterTrigger()).toHaveTextContent('premium')
+})
+
+it('disables the selected ordinary accounts with one verification and one management request', async () => {
+  const user = userEvent.setup()
+  const post = vi.spyOn(api, 'post').mockImplementation(async (url) => {
+    if (url === '/api/verify') {
+      return {
+        data: {
+          success: true,
+          data: {
+            proof_token: 'batch-proof',
+            method: '2fa',
+            scope: 'admin.user.manage',
+            expires_at: Math.floor(Date.now() / 1000) + 60,
+          },
+        },
+      }
+    }
+    if (url === '/api/user/manage') return { data: { success: true, data: 2 } }
+    throw new Error(`Unexpected POST ${url}`)
+  })
+  await renderUsers('/users/', [
+    premiumUser,
+    { ...premiumUser, id: 3, username: 'another-user' },
+    { ...premiumUser, id: 4, username: 'admin', role: 10 },
+    { ...premiumUser, id: 5, username: 'disabled', status: 2 },
+  ])
+  await user.click(screen.getByRole('checkbox', { name: 'Select all' }))
+  await user.click(
+    await screen.findByRole('button', { name: 'Disable selected users' })
+  )
+  await user.type(
+    await screen.findByLabelText('Authenticator code or backup code'),
+    '123456'
+  )
+  expect(post).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Verify' }))
+  const batch = { action: 'batch_disable', user_ids: [2, 3] }
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      '/api/user/manage',
+      batch,
+      expect.objectContaining({
+        headers: { 'X-Security-Proof': 'batch-proof' },
+        singleUseAuthorization: true,
+      })
+    )
+  )
+  expect(post).toHaveBeenCalledWith(
+    '/api/verify',
+    expect.objectContaining({ scope: 'admin.user.manage', context: batch }),
+    expect.anything()
+  )
+  expect(post).toHaveBeenCalledTimes(2)
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Disable selected users' })
+    ).not.toBeInTheDocument()
+  )
 })

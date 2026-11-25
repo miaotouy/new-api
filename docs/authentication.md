@@ -170,7 +170,7 @@ OAuth state、2FA pending、Passkey ceremony、Telegram bind 等临时状态存�
 管理员对其他用户执行的高风险操作同样要求 Proof，且 scope 的 context 绑定被操作用户，签发给某个用户的 Proof 不能改用于另一个用户或另一种动作：
 
 - `admin.user.delete`（`{"user_id"}`）：`DELETE /api/user/:id` 与 `POST /api/user/manage` 的 `delete`；
-- `admin.user.manage`（`{"user_id","action"}`，action 为 `disable` / `enable` / `promote` / `demote`）：`POST /api/user/manage`；额度调整 `add_quota` 不要求 Proof；
+- `admin.user.manage`（`{"user_id","action"}`，action 为 `disable` / `enable` / `promote` / `demote`）：`POST /api/user/manage`；批量禁用 `batch_disable` 使用同一 scope，Proof 绑定 `{"user_ids":[...],"action":"batch_disable"}`。每批 1–100 个已启用的普通用户 ID，顺序任意、ID 唯一。批次验证及禁用后会话撤销对应 OWASP ASVS v5.0.0-7.5.3、v5.0.0-7.4.2；额度调整 `add_quota` 不要求 Proof；
 - `admin.user.update`（`{"user_id"}`）：`PUT /api/user/` 在请求包含新密码或 `admin_permissions` 时要求；仅修改显示名、分组、备注不要求；
 - `admin.user.create`（`{"role"}`）：`POST /api/user/` 创建管理员角色时要求；创建普通用户不要求；
 - `admin.user.passkey.reset`（`{"user_id"}`）：`DELETE /api/user/:id/reset_passkey`；

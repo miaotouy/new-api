@@ -86,6 +86,11 @@ type AdminUserContext struct {
 	UserID int `json:"user_id"`
 }
 
+type AdminUserBatchDisableContext struct {
+	UserIDs []int  `json:"user_ids"`
+	Action  string `json:"action"`
+}
+
 type AdminUserManageContext struct {
 	UserID int    `json:"user_id"`
 	Action string `json:"action"`
@@ -205,6 +210,20 @@ func BindVerificationOperation(operation VerificationOperation) (VerificationBin
 		}
 		normalized = context
 	case VerificationScopeAdminUserManage:
+		if ids, ok := fields["user_ids"]; ok {
+			var batch AdminUserBatchDisableContext
+			if len(fields) != 2 || common.Unmarshal(ids, &batch.UserIDs) != nil ||
+				common.Unmarshal(fields["action"], &batch.Action) != nil || batch.Action != "batch_disable" ||
+				len(batch.UserIDs) == 0 || len(batch.UserIDs) > 100 {
+				return VerificationBinding{}, ErrVerificationContextInvalid
+			}
+			slices.Sort(batch.UserIDs)
+			if batch.UserIDs[0] <= 0 || len(slices.Compact(batch.UserIDs)) != len(batch.UserIDs) {
+				return VerificationBinding{}, ErrVerificationContextInvalid
+			}
+			normalized = batch
+			break
+		}
 		var context AdminUserManageContext
 		if len(fields) != 2 || common.Unmarshal(operation.Context, &context) != nil || context.UserID <= 0 || !slices.Contains(adminUserManageActions, context.Action) {
 			return VerificationBinding{}, ErrVerificationContextInvalid

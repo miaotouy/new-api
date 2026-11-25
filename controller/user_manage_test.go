@@ -154,6 +154,71 @@ func TestManageUserDisableAdvancesAuthVersionOnceAndRevokesSession(t *testing.T)
 	assert.Equal(t, model.UserSessionStatusRevoked, session.Status)
 }
 
+func TestManageUserBatchDisable(t *testing.T) {
+	db := setupManageUserTestDB(t)
+	users := []model.User{
+		{Username: "batch-one", AffCode: "one", Role: common.RoleCommonUser},
+		{Username: "batch-two", AffCode: "two", Role: common.RoleCommonUser},
+		{Username: "batch-admin", AffCode: "admin", Role: common.RoleAdminUser},
+	}
+	for i := range users {
+		users[i].Status = common.UserStatusEnabled
+		users[i].AuthVersion = 1
+		require.NoError(t, db.Create(&users[i]).Error)
+	}
+	_, err := service.CreateLoginSession(users[0].Id, "password", "127.0.0.1", "batch-test")
+	require.NoError(t, err)
+	batch := func(ids ...int) string {
+		t.Helper()
+		body, err := common.Marshal(service.AdminUserBatchDisableContext{Action: "batch_disable", UserIDs: ids})
+		require.NoError(t, err)
+		return string(body)
+	}
+	a, b, admin := users[0].Id, users[1].Id, users[2].Id
+	both := batch(a, b)
+	operation := service.VerificationOperation{Scope: service.VerificationScopeAdminUserManage, Context: []byte(both)}
+	identity, proof := manageUserProof(t, db, operation)
+	request := func(body, proof string) securityEnrollmentResponse {
+		t.Helper()
+		recorder := performVerifiedManageUserRequest(t, body, identity, proof)
+		var result securityEnrollmentResponse
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &result))
+		return result
+	}
+	assert.Equal(t, "SECURITY_PROOF_REQUIRED", request(both, "").Code)
+	assert.Equal(t, "SECURITY_PROOF_CONTEXT_MISMATCH", request(batch(a, admin), proof).Code)
+	assert.Equal(t, "SECURITY_PROOF_CONTEXT_MISMATCH", request(fmt.Sprintf(`{"action":"enable","id":%d}`, a), proof).Code)
+	for _, ids := range [][]int{nil, {a, a}, {-1}, make([]int, 101)} {
+		assert.Equal(t, "SECURITY_CONTEXT_INVALID", request(batch(ids...), proof).Code)
+	}
+	operation.Context = []byte(batch(a, admin))
+	binding, err := service.BindVerificationOperation(operation)
+	require.NoError(t, err)
+	protectedProof, _, err := service.IssueSecurityProof(identity, service.VerificationMethodPassword, binding)
+	require.NoError(t, err)
+	assert.False(t, request(batch(a, admin), protectedProof).Success)
+	var enabled int64
+	require.NoError(t, db.Model(&model.User{}).Where("id IN ? AND status = ? AND auth_version = 1", []int{a, b, admin}, common.UserStatusEnabled).Count(&enabled).Error)
+	assert.EqualValues(t, 3, enabled)
+	result := request(batch(b, a), proof)
+	require.True(t, result.Success, result.Message)
+	assert.JSONEq(t, "2", string(result.Data))
+	assert.Equal(t, "SECURITY_PROOF_CONSUMED", request(both, proof).Code)
+	var disabled int64
+	require.NoError(t, db.Model(&model.User{}).Where("status = ? AND auth_version = 2", common.UserStatusDisabled).Count(&disabled).Error)
+	assert.EqualValues(t, 2, disabled)
+	var session model.UserSession
+	require.NoError(t, db.Where("user_id = ?", a).First(&session).Error)
+	assert.Equal(t, model.UserSessionStatusRevoked, session.Status)
+	var events []model.AuditLog
+	require.NoError(t, model.LOG_DB.Where("action = ?", "user.manage").Find(&events).Error)
+	assert.Len(t, events, 2)
+	expired, _, err := service.IssueSecurityProof(identity, service.VerificationMethodPassword, binding)
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&model.AuthFlow{}).Where("purpose = ? AND consumed_at IS NULL", model.AuthFlowPurposeSecurityProof).Update("expires_at", time.Now().Add(-time.Minute)).Error)
+	assert.Equal(t, "SECURITY_PROOF_EXPIRED", request(batch(a, admin), expired).Code)
+}
+
 func TestManageUserDemoteAdvancesAuthVersionAndRevokesSessionsOnce(t *testing.T) {
 	db := setupManageUserTestDB(t)
 	previousMaster := common.IsMasterNode

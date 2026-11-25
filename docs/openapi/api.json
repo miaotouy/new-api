@@ -2107,10 +2107,19 @@
                   "id": {
                     "type": "integer"
                   },
+                  "user_ids": {
+                    "type": "array",
+                    "description": "批量禁用时必填。X-Security-Proof 必须绑定到此次 batch_disable 操作及所选用户。",
+                    "items": { "type": "integer", "minimum": 1 },
+                    "uniqueItems": true,
+                    "minItems": 1,
+                    "maxItems": 100
+                  },
                   "action": {
                     "type": "string",
                     "enum": [
                       "disable",
+                      "batch_disable",
                       "enable",
                       "delete",
                       "promote",

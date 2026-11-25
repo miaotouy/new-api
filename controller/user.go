@@ -1084,10 +1084,42 @@ func updateAdminPermissionsForUserInTx(c *gin.Context, tx *gorm.DB, userID int, 
 }
 
 type ManageRequest struct {
-	Id     int    `json:"id"`
-	Action string `json:"action"`
-	Value  int    `json:"value"`
-	Mode   string `json:"mode"`
+	UserIDs []int  `json:"user_ids"`
+	Id      int    `json:"id"`
+	Action  string `json:"action"`
+	Value   int    `json:"value"`
+	Mode    string `json:"mode"`
+}
+
+// batchDisableUsers limits bulk moderation to ordinary accounts, including for root.
+func batchDisableUsers(c *gin.Context, ids []int) {
+	authorization := requireAdminUserProof(c, service.VerificationScopeAdminUserManage, service.AdminUserBatchDisableContext{UserIDs: ids, Action: "batch_disable"})
+	if authorization == nil {
+		return
+	}
+	users, err := model.DisableActiveCommonUsers(ids)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		common.ApiErrorT(c, "Refresh the list and try again.")
+		return
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var cleanupErr error
+	for _, user := range users {
+		recordManageAuditFor(c, user.Id, "user.manage", map[string]any{
+			"action": "disable", "username": user.Username, "id": user.Id, "verification_method": authorization.Method,
+		})
+		_, sessionErr := model.RevokeAllUserSessions(user.Id, "user_security_changed")
+		cleanupErr = errors.Join(cleanupErr, sessionErr, model.PublishUserAuthCache(user.Id), model.InvalidateUserTokensCache(user.Id))
+	}
+	if cleanupErr != nil {
+		common.SysLog(common.LogText("batch disable cleanup failed: %s", cleanupErr.Error()))
+		common.ApiErrorT(c, "Users disabled. Session or cache cleanup failed; check the server logs.")
+		return
+	}
+	common.ApiSuccess(c, len(users))
 }
 
 // ManageUser Only admin user can do this
@@ -1097,6 +1129,10 @@ func ManageUser(c *gin.Context) {
 
 	if err != nil {
 		common.ApiErrorT(c, "Invalid parameters")
+		return
+	}
+	if req.Action == "batch_disable" {
+		batchDisableUsers(c, req.UserIDs)
 		return
 	}
 	if req.Action == "add_quota" {
